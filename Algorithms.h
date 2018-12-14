@@ -11,4 +11,4 @@ void allocate_next_gen(int nb_indiv);
 /**
  * Run all kernel for one generation -- all individuals
  */
-void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double selection_pressure, int grid_width, int grid_height, double mutation_rate);
+void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double selection_pressure, int grid_width, int grid_height, double mutation_rate, bool first_gen);

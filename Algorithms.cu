@@ -5,6 +5,30 @@
 #include "ThreefryGPU.h"
 #include "GPUDna.cuh"
 
+#include <cmath>
+#include <map>
+#include <algorithm>
+#include <sys/stat.h>
+#include <err.h>
+#include<chrono>
+#include <iostream>
+
+#include "AeTime.h"
+#include "Threefry.h"
+#include "DnaMutator.h"
+#include "Stats.h"
+#include "ExpManager.h"
+#include "Algorithms.h"
+#include "AeTime.h"
+#include "Promoter.h"
+#include "RNA.h"
+#include "Protein.h"
+#include "Organism.h"
+#include "Gaussian.h"
+
+using namespace std::chrono;
+
+
 #include <cstdint>
 #include <stdio.h>
 #include <unistd.h>
@@ -208,33 +232,33 @@ __device__ static int mod(int a, int b)
  * @param grid_height
  * @param mutation_rate
  */
-void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double selection_pressure, int grid_width, int grid_height, double mutation_rate){
+void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double selection_pressure, int grid_width, int grid_height, double mutation_rate, bool first_gen){
 
     // Running the simulation process for each organism
     {
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             exp_m->selection(indiv_id);
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             exp_m->do_mutation(indiv_id);
         }
         t2 = high_resolution_clock::now();
         auto duration_mutation = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             exp_m->opt_prom_compute_RNA(indiv_id);
         }
         t2 = high_resolution_clock::now();
         auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
                 exp_m->start_protein(indiv_id);
             }
@@ -244,7 +268,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
 
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
                 exp_m->compute_protein(indiv_id);
             }
@@ -254,7 +278,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
 
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
                 exp_m->translate_protein(indiv_id, w_max);
             }
@@ -264,7 +288,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
 
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
                 exp_m->compute_phenotype(indiv_id);
             }
@@ -274,7 +298,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
 
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
                 exp_m->compute_fitness(indiv_id, selection_pressure);
             }
@@ -289,7 +313,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
                  <<","<<duration_start_protein<<","<<duration_compute_protein<<","<<duration_translate_protein
                  <<","<<duration_compute_phenotype<<","<<duration_compute_phenotype<<","<<duration_compute_fitness<<std::endl;
     }
-    for (int indiv_id = 1; indiv_id < nb_indivs_; indiv_id++) {
+    for (int indiv_id = 1; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         exp_m->prev_internal_organisms_[indiv_id] = exp_m->internal_organisms_[indiv_id];
         exp_m->internal_organisms_[indiv_id] = nullptr;
     }
@@ -297,10 +321,10 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
     // Search for the best
     double best_fitness = exp_m->prev_internal_organisms_[0]->fitness;
     int idx_best = 0;
-    for (int indiv_id = 1; indiv_id < nb_indivs_; indiv_id++) {
+    for (int indiv_id = 1; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         if (exp_m->prev_internal_organisms_[indiv_id]->fitness > best_fitness) {
             idx_best = indiv_id;
-            best_fitness = prev_internal_organisms_[indiv_id]->fitness;
+            best_fitness = exp_m->prev_internal_organisms_[indiv_id]->fitness;
         }
     }
     exp_m->best_indiv = exp_m->prev_internal_organisms_[idx_best];
@@ -316,7 +340,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
     }
 
     std::vector<int> already_seen;
-    for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+    for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         if (std::find(already_seen.begin(), already_seen.end(), indiv_id) == already_seen.end()) {
             exp_m->prev_internal_organisms_[indiv_id]->reset_stats();
 

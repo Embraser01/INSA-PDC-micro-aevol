@@ -1451,7 +1451,7 @@ void ExpManager::run_evolution_on_gpu(int nb_gen) {
     AeTime::plusplus();
 
       high_resolution_clock::time_point t1 = high_resolution_clock::now();
-      run_a_step_on_GPU(this, nb_indivs_, w_max_, selection_pressure_, grid_width_, grid_height_,mutation_rate_);
+      run_a_step_on_GPU(this, nb_indivs_, w_max_, selection_pressure_, grid_width_, grid_height_,mutation_rate_, firstGen);
 
       t2 = high_resolution_clock::now();
       auto duration_transfer_in = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
