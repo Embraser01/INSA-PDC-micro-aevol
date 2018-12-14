@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
         exp_manager = new ExpManager(resume);
     }
 
-    exp_manager->run_evolution(nbstep);
+    exp_manager->run_evolution_on_gpu(nbstep);
 
     delete exp_manager;
 
