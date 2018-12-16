@@ -47,9 +47,14 @@ target_link_libraries(pdc_mini_aevol PUBLIC mini_aevol)
 # Enable CUDA
 if (USE_CUDA)
     enable_language("CUDA")
-    set(CUDA_NVCC_FLAGS "-std=c++11 -arch=compute_60 -lineinfo")
-    add_executable(pdc_mini_aevol_gpu main.cpp Algorithms.cu ThreefryGPU.cu)
-    set_property(TARGET pdc_mini_aevol_gpu PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-    target_link_libraries(pdc_mini_aevol_gpu PUBLIC mini_aevol)
-    target_compile_definitions(pdc_mini_aevol_gpu PRIVATE USE_CUDA=1)
+
+    # CUDA Files
+    set(CMAKE_CUDA_FLAGS "-std=c++11 -arch=compute_60 -lineinfo")
+    target_compile_definitions(mini_aevol PRIVATE USE_CUDA=1)
+    add_library(cuda_part STATIC Algorithms.cu ThreefryGPU.cu)
+    set_target_properties(cuda_part PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+
+    # Executable
+    add_executable(pdc_mini_aevol_gpu main.cpp)
+    target_link_libraries(pdc_mini_aevol_gpu PUBLIC mini_aevol cuda_part)
 endif ()
