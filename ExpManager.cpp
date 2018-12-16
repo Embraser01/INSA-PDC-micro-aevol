@@ -61,15 +61,14 @@ using namespace std;
  */
 ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutation_rate, int init_length_dna,
                        double w_max, int selection_pressure, int backup_step)
-    : rng_(new Threefry(grid_width, grid_height, seed))
-{
+        : rng_(new Threefry(grid_width, grid_height, seed)) {
     // Initializing the data structure
     grid_height_ = grid_height;
     grid_width_ = grid_width;
 
     backup_step_ = backup_step;
 
-    nb_indivs_ = grid_height*grid_width;
+    nb_indivs_ = grid_height * grid_width;
 
     w_max_ = w_max;
     selection_pressure_ = selection_pressure;
@@ -78,18 +77,18 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
     prev_internal_organisms_ = new std::shared_ptr<Organism>[nb_indivs_];
 
     next_generation_reproducer_ = new int[nb_indivs_];
-    dna_mutator_array_ = new DnaMutator*[nb_indivs_];
+    dna_mutator_array_ = new DnaMutator *[nb_indivs_];
 
     mutation_rate_ = mutation_rate;
 
     // Building the target environment
-    Gaussian* g1 = new Gaussian(1.2,0.52,0.12);
-    Gaussian* g2 = new Gaussian(-1.4,0.5,0.07);
-    Gaussian* g3 = new Gaussian(0.3,0.8,0.03);
+    Gaussian *g1 = new Gaussian(1.2, 0.52, 0.12);
+    Gaussian *g2 = new Gaussian(-1.4, 0.5, 0.07);
+    Gaussian *g3 = new Gaussian(0.3, 0.8, 0.03);
 
     target = new double[300];
     for (int i = 0; i < 300; i++) {
-        double pt_i = ((double)i)/300.0;
+        double pt_i = ((double) i) / 300.0;
 
         double tmp = g1->compute_y(pt_i);
         tmp += g2->compute_y(pt_i);
@@ -101,18 +100,18 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
         target[i] = tmp;
     }
 
-  delete g1;
-  delete g2;
-  delete g3;
+    delete g1;
+    delete g2;
+    delete g3;
 
     geometric_area_ = 0;
 
 
     for (int i = 0; i < 298; i++) {
-        geometric_area_+=((fabs(target[i]) + fabs(target[i+1])) / (600.0));
+        geometric_area_ += ((fabs(target[i]) + fabs(target[i + 1])) / (600.0));
     }
 
-    printf("Initialized environmental target %f\n",geometric_area_);
+    printf("Initialized environmental target %f\n", geometric_area_);
 
 
     // Initializing the PRNGs
@@ -123,7 +122,7 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
     // Generate a random organism that is better than nothing
     double r_compare = 0;
 
-    while(r_compare >= 0) {
+    while (r_compare >= 0) {
         auto random_organism = std::make_shared<Organism>(this, init_length_dna, 0);
         internal_organisms_[0] = random_organism;
 
@@ -139,7 +138,7 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
 
         compute_fitness(0, selection_pressure);
 
-        r_compare = round((random_organism->metaerror-geometric_area_)* 1E10) / 1E10;
+        r_compare = round((random_organism->metaerror - geometric_area_) * 1E10) / 1E10;
 
     }
 
@@ -148,10 +147,10 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
     // Create a population of clones based on the randomly generated organism
     for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
         prev_internal_organisms_[indiv_id] = internal_organisms_[indiv_id] =
-            std::make_shared<Organism>(this, internal_organisms_[0]);
+                std::make_shared<Organism>(this, internal_organisms_[0]);
         internal_organisms_[indiv_id]->indiv_id_ = indiv_id;
         internal_organisms_[indiv_id]->parent_id_ = 0;
-        internal_organisms_[indiv_id]->global_id = AeTime::time()*nb_indivs_+indiv_id;
+        internal_organisms_[indiv_id]->global_id = AeTime::time() * nb_indivs_ + indiv_id;
     }
 
     // Create backup and stats directory
@@ -170,12 +169,12 @@ ExpManager::ExpManager(int time) {
 
     geometric_area_ = 0;
     for (int i = 0; i < 298; i++) {
-        geometric_area_+=((fabs(target[i]) + fabs(target[i+1])) / (600.0));
+        geometric_area_ += ((fabs(target[i]) + fabs(target[i + 1])) / (600.0));
     }
 
     printf("Initialized environmental target %f\n", geometric_area_);
 
-    dna_mutator_array_ = new DnaMutator*[nb_indivs_];
+    dna_mutator_array_ = new DnaMutator *[nb_indivs_];
     for (int indiv_id = 0; indiv_id < nb_indivs_; ++indiv_id) {
         dna_mutator_array_[indiv_id] = nullptr;
     }
@@ -190,15 +189,13 @@ void ExpManager::create_directory() {
 
     // Backup
     int status = mkdir("backup", 0755);
-    if (status == -1 && errno != EEXIST)
-    {
+    if (status == -1 && errno != EEXIST) {
         err(EXIT_FAILURE, "backup");
     }
 
     // Stats
     status = mkdir("stats", 0755);
-    if (status == -1 && errno != EEXIST)
-    {
+    if (status == -1 && errno != EEXIST) {
         err(EXIT_FAILURE, "stats");
     }
 }
@@ -217,14 +214,13 @@ void ExpManager::save(int t) {
     // -------------------------------------------------------------------------
     // Open backup files
     // -------------------------------------------------------------------------
-    gzFile  exp_backup_file = gzopen(exp_backup_file_name, "w");
+    gzFile exp_backup_file = gzopen(exp_backup_file_name, "w");
 
 
     // -------------------------------------------------------------------------
     // Check that files were correctly opened
     // -------------------------------------------------------------------------
-    if (exp_backup_file == Z_NULL)
-    {
+    if (exp_backup_file == Z_NULL) {
         printf("Error: could not open backup file %s\n",
                exp_backup_file_name);
         exit(EXIT_FAILURE);
@@ -235,26 +231,26 @@ void ExpManager::save(int t) {
     // Write the backup file
     // -------------------------------------------------------------------------
     printf("Save size\n");
-    gzwrite(exp_backup_file,&t,sizeof(t));
+    gzwrite(exp_backup_file, &t, sizeof(t));
 
-    gzwrite(exp_backup_file,&grid_height_,sizeof(grid_height_));
-    gzwrite(exp_backup_file,&grid_width_,sizeof(grid_width_));
+    gzwrite(exp_backup_file, &grid_height_, sizeof(grid_height_));
+    gzwrite(exp_backup_file, &grid_width_, sizeof(grid_width_));
 
-    gzwrite(exp_backup_file,&nb_indivs_,sizeof(nb_indivs_));
+    gzwrite(exp_backup_file, &nb_indivs_, sizeof(nb_indivs_));
 
-    gzwrite(exp_backup_file,&backup_step_,sizeof(backup_step_));
+    gzwrite(exp_backup_file, &backup_step_, sizeof(backup_step_));
 
 
     //rng_->save(exp_backup_file);
 
-    gzwrite(exp_backup_file,&w_max_,sizeof(w_max_));
-    gzwrite(exp_backup_file,&selection_pressure_,sizeof(selection_pressure_));
+    gzwrite(exp_backup_file, &w_max_, sizeof(w_max_));
+    gzwrite(exp_backup_file, &selection_pressure_, sizeof(selection_pressure_));
 
-    gzwrite(exp_backup_file,&mutation_rate_,sizeof(mutation_rate_));
+    gzwrite(exp_backup_file, &mutation_rate_, sizeof(mutation_rate_));
 
     for (int i = 0; i < 300; i++) {
         double tmp = target[i];
-        gzwrite(exp_backup_file,&tmp,sizeof(tmp));
+        gzwrite(exp_backup_file, &tmp, sizeof(tmp));
     }
 
     for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
@@ -279,14 +275,13 @@ void ExpManager::load(int t) {
     // -------------------------------------------------------------------------
     // Open backup files
     // -------------------------------------------------------------------------
-    gzFile  exp_backup_file = gzopen(exp_backup_file_name, "r");
+    gzFile exp_backup_file = gzopen(exp_backup_file_name, "r");
 
 
     // -------------------------------------------------------------------------
     // Check that files were correctly opened
     // -------------------------------------------------------------------------
-    if (exp_backup_file == Z_NULL)
-    {
+    if (exp_backup_file == Z_NULL) {
         printf("Error: could not open backup file %s\n",
                exp_backup_file_name);
         exit(EXIT_FAILURE);
@@ -297,36 +292,36 @@ void ExpManager::load(int t) {
     // Write the backup file
     // -------------------------------------------------------------------------
     int time;
-    gzread(exp_backup_file,&time,sizeof(time));
+    gzread(exp_backup_file, &time, sizeof(time));
     AeTime::set_time(time);
 
-    gzread(exp_backup_file,&grid_height_,sizeof(grid_height_));
+    gzread(exp_backup_file, &grid_height_, sizeof(grid_height_));
 
-    gzread(exp_backup_file,&grid_width_,sizeof(grid_width_));
+    gzread(exp_backup_file, &grid_width_, sizeof(grid_width_));
 
-    gzread(exp_backup_file,&nb_indivs_,sizeof(nb_indivs_));
+    gzread(exp_backup_file, &nb_indivs_, sizeof(nb_indivs_));
 
-    internal_organisms_ = new std::shared_ptr<Organism> [nb_indivs_];
-    prev_internal_organisms_ = new std::shared_ptr<Organism> [nb_indivs_];
+    internal_organisms_ = new std::shared_ptr<Organism>[nb_indivs_];
+    prev_internal_organisms_ = new std::shared_ptr<Organism>[nb_indivs_];
 
     next_generation_reproducer_ = new int[nb_indivs_];
 
-    gzread(exp_backup_file,&backup_step_,sizeof(backup_step_));
+    gzread(exp_backup_file, &backup_step_, sizeof(backup_step_));
 
-    gzread(exp_backup_file,&w_max_,sizeof(w_max_));
-    gzread(exp_backup_file,&selection_pressure_,sizeof(selection_pressure_));
+    gzread(exp_backup_file, &w_max_, sizeof(w_max_));
+    gzread(exp_backup_file, &selection_pressure_, sizeof(selection_pressure_));
 
-    gzread(exp_backup_file,&mutation_rate_,sizeof(mutation_rate_));
+    gzread(exp_backup_file, &mutation_rate_, sizeof(mutation_rate_));
 
     for (int i = 0; i < 300; i++) {
         double tmp;
-        gzread(exp_backup_file,&tmp,sizeof(tmp));
+        gzread(exp_backup_file, &tmp, sizeof(tmp));
         target[i] = tmp;
     }
 
     for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
         prev_internal_organisms_[indiv_id] = internal_organisms_[indiv_id] =
-            std::make_shared<Organism>(this, exp_backup_file);
+                std::make_shared<Organism>(this, exp_backup_file);
     }
 
     rng_ = std::move(std::make_unique<Threefry>(grid_width_, grid_height_, exp_backup_file));
@@ -350,7 +345,7 @@ void ExpManager::do_mutation(int indiv_id) {
 
     if (dna_mutator_array_[indiv_id]->hasMutate()) {
         internal_organisms_[indiv_id] =
-            std::make_shared<Organism>(this, prev_internal_organisms_[next_generation_reproducer_[indiv_id]]);
+                std::make_shared<Organism>(this, prev_internal_organisms_[next_generation_reproducer_[indiv_id]]);
 
         internal_organisms_[indiv_id]->global_id = AeTime::time() * nb_indivs_ + indiv_id;
         internal_organisms_[indiv_id]->indiv_id_ = indiv_id;
@@ -376,15 +371,15 @@ ExpManager::~ExpManager() {
     delete stats_best;
     delete stats_mean;
 
-    for (auto i = 0 ; i < nb_indivs_ ; ++i) {
-      delete dna_mutator_array_[i];
+    for (auto i = 0; i < nb_indivs_; ++i) {
+        delete dna_mutator_array_[i];
     }
-    delete [] dna_mutator_array_;
+    delete[] dna_mutator_array_;
 
-    delete [] internal_organisms_;
-    delete [] prev_internal_organisms_;
-    delete [] next_generation_reproducer_;
-    delete [] target;
+    delete[] internal_organisms_;
+    delete[] prev_internal_organisms_;
+    delete[] next_generation_reproducer_;
+    delete[] target;
 }
 
 /**
@@ -403,21 +398,21 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
             selection(indiv_id);
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
-        auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
             do_mutation(indiv_id);
         }
         t2 = high_resolution_clock::now();
-        auto duration_mutation = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_mutation = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
             opt_prom_compute_RNA(indiv_id);
         }
         t2 = high_resolution_clock::now();
-        auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
@@ -426,7 +421,7 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_start_protein = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_start_protein = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -436,7 +431,7 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_compute_protein = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_compute_protein = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -446,7 +441,7 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_translate_protein = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_translate_protein = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -456,7 +451,7 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_compute_phenotype = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_compute_phenotype = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -466,14 +461,16 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         //transfer_out(this);
 
 
-        std::cout<<"LOG,"<<duration_selection<<","<<duration_mutation<<","<<duration_start_stop_RNA
-                 <<","<<duration_start_protein<<","<<duration_compute_protein<<","<<duration_translate_protein
-                 <<","<<duration_compute_phenotype<<","<<duration_compute_phenotype<<","<<duration_compute_fitness<<std::endl;
+        std::cout << "LOG," << duration_selection << "," << duration_mutation << "," << duration_start_stop_RNA
+                  << "," << duration_start_protein << "," << duration_compute_protein << ","
+                  << duration_translate_protein
+                  << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
+                  << duration_compute_fitness << std::endl;
     }
     for (int indiv_id = 1; indiv_id < nb_indivs_; indiv_id++) {
         prev_internal_organisms_[indiv_id] = internal_organisms_[indiv_id];
@@ -549,10 +546,10 @@ void ExpManager::start_stop_RNA(int indiv_id) {
             int dist_lead = internal_organisms_[indiv_id]->dna_->promoter_at(dna_pos);
 
             if (dist_lead <= 4) {
-                Promoter* nprom = new Promoter(dna_pos, dist_lead);
+                Promoter *nprom = new Promoter(dna_pos, dist_lead);
                 int prom_idx = internal_organisms_[indiv_id]->count_prom;
                 internal_organisms_[indiv_id]->count_prom =
-                            internal_organisms_[indiv_id]->count_prom + 1;
+                        internal_organisms_[indiv_id]->count_prom + 1;
 
                 internal_organisms_[indiv_id]->promoters[prom_idx] = nprom;
                 internal_organisms_[indiv_id]->prom_pos[dna_pos] = prom_idx;
@@ -582,7 +579,7 @@ void ExpManager::opt_prom_compute_RNA(int indiv_id) {
         internal_organisms_[indiv_id]->rnas.resize(
                 internal_organisms_[indiv_id]->promoters.size());
 
-        for (int prom_idx = 0; prom_idx< internal_organisms_[indiv_id]->promoters.size(); prom_idx++) {
+        for (int prom_idx = 0; prom_idx < internal_organisms_[indiv_id]->promoters.size(); prom_idx++) {
 
             if (internal_organisms_[indiv_id]->promoters[prom_idx] != nullptr) {
                 int rna_idx = prom_idx;
@@ -596,74 +593,75 @@ void ExpManager::opt_prom_compute_RNA(int indiv_id) {
                     prom_error = fabs(
                             ((float) internal_organisms_[indiv_id]->promoters[rna_idx]->error));
 
-                        /* Search for terminators */
-                        int cur_pos =
-                                prom_pos + 22;
-                        cur_pos = cur_pos >= internal_organisms_[indiv_id]->length() ? cur_pos -
-                                internal_organisms_[indiv_id]->length() :
-                                  cur_pos;
-                        int start_pos = cur_pos;
+                    /* Search for terminators */
+                    int cur_pos =
+                            prom_pos + 22;
+                    cur_pos = cur_pos >= internal_organisms_[indiv_id]->length() ? cur_pos -
+                                                                                   internal_organisms_[indiv_id]->length()
+                                                                                 :
+                              cur_pos;
+                    int start_pos = cur_pos;
 
-                        bool terminator_found = false;
-                        bool no_terminator = false;
-                        int term_dist_leading = 0;
+                    bool terminator_found = false;
+                    bool no_terminator = false;
+                    int term_dist_leading = 0;
 
-                        int loop_size = 0;
+                    int loop_size = 0;
 
-                        while (!terminator_found) {
-                            loop_size++;
-                            for (int t_motif_id = 0; t_motif_id < 4; t_motif_id++)
-                                term_dist_leading = internal_organisms_[indiv_id]->dna_->terminator_at(cur_pos);
+                    while (!terminator_found) {
+                        loop_size++;
+                        for (int t_motif_id = 0; t_motif_id < 4; t_motif_id++)
+                            term_dist_leading = internal_organisms_[indiv_id]->dna_->terminator_at(cur_pos);
 
-                            if (term_dist_leading == 4)
+                        if (term_dist_leading == 4)
+                            terminator_found = true;
+                        else {
+                            cur_pos = cur_pos + 1 >= internal_organisms_[indiv_id]->length() ? cur_pos + 1 -
+                                                                                               internal_organisms_[indiv_id]->length()
+                                                                                             :
+                                      cur_pos + 1;
+                            term_dist_leading = 0;
+                            if (cur_pos == start_pos) {
+                                no_terminator = true;
                                 terminator_found = true;
-                            else {
-                                cur_pos = cur_pos + 1 >= internal_organisms_[indiv_id]->length() ? cur_pos + 1 -
-                                        internal_organisms_[indiv_id]->length()
-                                                                            :
-                                          cur_pos + 1;
-                                term_dist_leading = 0;
-                                if (cur_pos == start_pos) {
-                                    no_terminator = true;
-                                    terminator_found = true;
-                                }
                             }
                         }
+                    }
 
-                        if (!no_terminator) {
+                    if (!no_terminator) {
 
-                            int32_t rna_end =
-                                    cur_pos + 10 >= internal_organisms_[indiv_id]->length() ?
-                                    cur_pos + 10 - internal_organisms_[indiv_id]->length() :
-                                    cur_pos + 10;
+                        int32_t rna_end =
+                                cur_pos + 10 >= internal_organisms_[indiv_id]->length() ?
+                                cur_pos + 10 - internal_organisms_[indiv_id]->length() :
+                                cur_pos + 10;
 
-                            int32_t rna_length = 0;
+                        int32_t rna_length = 0;
 
-                            if (prom_pos
-                                > rna_end)
-                                rna_length = internal_organisms_[indiv_id]->length() -
-                                             prom_pos
-                                             + rna_end;
-                            else
-                                rna_length = rna_end - prom_pos;
+                        if (prom_pos
+                            > rna_end)
+                            rna_length = internal_organisms_[indiv_id]->length() -
+                                         prom_pos
+                                         + rna_end;
+                        else
+                            rna_length = rna_end - prom_pos;
 
-                            rna_length -= 21;
+                        rna_length -= 21;
 
-                            if (rna_length > 0) {
-                                int glob_rna_idx = internal_organisms_[indiv_id]->rna_count_;
-                                internal_organisms_[indiv_id]->rna_count_ =
-                                        internal_organisms_[indiv_id]->rna_count_ + 1;
+                        if (rna_length > 0) {
+                            int glob_rna_idx = internal_organisms_[indiv_id]->rna_count_;
+                            internal_organisms_[indiv_id]->rna_count_ =
+                                    internal_organisms_[indiv_id]->rna_count_ + 1;
 
-                                internal_organisms_[indiv_id]->rnas[glob_rna_idx] = new RNA(
-                                        internal_organisms_[indiv_id]->promoters[rna_idx]->pos,
-                                        rna_end,
-                                        1.0 -
-                                        std::fabs(
-                                                ((float) internal_organisms_[indiv_id]->promoters[rna_idx]->error)) /
-                                        5.0, rna_length);
-                            }
-
+                            internal_organisms_[indiv_id]->rnas[glob_rna_idx] = new RNA(
+                                    internal_organisms_[indiv_id]->promoters[rna_idx]->pos,
+                                    rna_end,
+                                    1.0 -
+                                    std::fabs(
+                                            ((float) internal_organisms_[indiv_id]->promoters[rna_idx]->error)) /
+                                    5.0, rna_length);
                         }
+
+                    }
                 }
             }
         }
@@ -787,18 +785,18 @@ void ExpManager::start_protein(int indiv_id) {
  */
 void ExpManager::compute_protein(int indiv_id) {
 
-        int resize_to = 0;
+    int resize_to = 0;
 
-        for (int rna_idx = 0; rna_idx <
-                              (int) internal_organisms_[indiv_id]->rna_count_; rna_idx++) {
-            if (internal_organisms_[indiv_id]->rnas[rna_idx]->is_init_)
-                resize_to += internal_organisms_[indiv_id]->
-                        rnas[rna_idx]->start_prot.size();
-        }
+    for (int rna_idx = 0; rna_idx <
+                          (int) internal_organisms_[indiv_id]->rna_count_; rna_idx++) {
+        if (internal_organisms_[indiv_id]->rnas[rna_idx]->is_init_)
+            resize_to += internal_organisms_[indiv_id]->
+                    rnas[rna_idx]->start_prot.size();
+    }
 
 
     internal_organisms_[indiv_id]->
-                proteins.resize(resize_to);
+            proteins.resize(resize_to);
 
     for (int rna_idx = 0; rna_idx <
                           (int) internal_organisms_[indiv_id]->rna_count_; rna_idx++) {
@@ -806,133 +804,132 @@ void ExpManager::compute_protein(int indiv_id) {
             for (int protein_idx = 0;
                  protein_idx < (int) internal_organisms_[indiv_id]->
                          rnas[rna_idx]->start_prot.size(); protein_idx++) {
-                    int start_protein_pos = internal_organisms_[indiv_id]->
-                                                    rnas[rna_idx]->start_prot[protein_idx] + 13;
+                int start_protein_pos = internal_organisms_[indiv_id]->
+                        rnas[rna_idx]->start_prot[protein_idx] + 13;
 
 
-                    int length;
+                int length;
 
-                        start_protein_pos = start_protein_pos >= internal_organisms_[indiv_id]->length() ?
-                                            start_protein_pos - internal_organisms_[indiv_id]->length()
-                                                                                    : start_protein_pos;
+                start_protein_pos = start_protein_pos >= internal_organisms_[indiv_id]->length() ?
+                                    start_protein_pos - internal_organisms_[indiv_id]->length()
+                                                                                                 : start_protein_pos;
 
-                        if (internal_organisms_[indiv_id]->
-                                rnas[rna_idx]->start_prot[protein_idx] <
-                                internal_organisms_[indiv_id]->
-                                    rnas[rna_idx]->end) {
-                            length = internal_organisms_[indiv_id]->
-                                    rnas[rna_idx]->end -
-                                    internal_organisms_[indiv_id]->
-                                             rnas[rna_idx]->start_prot[protein_idx];
-                        } else {
-                            length = internal_organisms_[indiv_id]->length() -
-                                    internal_organisms_[indiv_id]->
-                                             rnas[rna_idx]->start_prot[protein_idx] +
-                                    internal_organisms_[indiv_id]->
-                                             rnas[rna_idx]->end;
+                if (internal_organisms_[indiv_id]->
+                        rnas[rna_idx]->start_prot[protein_idx] <
+                    internal_organisms_[indiv_id]->
+                            rnas[rna_idx]->end) {
+                    length = internal_organisms_[indiv_id]->
+                            rnas[rna_idx]->end -
+                             internal_organisms_[indiv_id]->
+                                     rnas[rna_idx]->start_prot[protein_idx];
+                } else {
+                    length = internal_organisms_[indiv_id]->length() -
+                             internal_organisms_[indiv_id]->
+                                     rnas[rna_idx]->start_prot[protein_idx] +
+                             internal_organisms_[indiv_id]->
+                                     rnas[rna_idx]->end;
 
-                        }
+                }
 
-                        length -= 13;
-
-
-                    bool is_protein = false;
-
-                    length += 1;
-                    length = length - (length % 3);
-
-                    int j = 0;
-                    int transcribed_start = 0;
+                length -= 13;
 
 
-                        transcribed_start = internal_organisms_[indiv_id]->
-                                rnas[rna_idx]->begin + 22;
-                        transcribed_start = transcribed_start >= internal_organisms_[indiv_id]->length() ?
-                                            transcribed_start - internal_organisms_[indiv_id]->length()
-                                                                                    : transcribed_start;
+                bool is_protein = false;
 
-                        if (transcribed_start <= internal_organisms_[indiv_id]->
-                                rnas[rna_idx]->start_prot[protein_idx]) {
-                            j = internal_organisms_[indiv_id]->
-                                    rnas[rna_idx]->start_prot[protein_idx] -
-                                transcribed_start;
-                        } else {
-                            j = internal_organisms_[indiv_id]->length() -
-                                transcribed_start +
-                                    internal_organisms_[indiv_id]->
-                                        rnas[rna_idx]->start_prot[protein_idx];
+                length += 1;
+                length = length - (length % 3);
 
-                        }
+                int j = 0;
+                int transcribed_start = 0;
 
 
-                    j += 13;
+                transcribed_start = internal_organisms_[indiv_id]->
+                        rnas[rna_idx]->begin + 22;
+                transcribed_start = transcribed_start >= internal_organisms_[indiv_id]->length() ?
+                                    transcribed_start - internal_organisms_[indiv_id]->length()
+                                                                                                 : transcribed_start;
+
+                if (transcribed_start <= internal_organisms_[indiv_id]->
+                        rnas[rna_idx]->start_prot[protein_idx]) {
+                    j = internal_organisms_[indiv_id]->
+                            rnas[rna_idx]->start_prot[protein_idx] -
+                        transcribed_start;
+                } else {
+                    j = internal_organisms_[indiv_id]->length() -
+                        transcribed_start +
+                        internal_organisms_[indiv_id]->
+                                rnas[rna_idx]->start_prot[protein_idx];
+
+                }
+
+
+                j += 13;
 
 
                 while (internal_organisms_[indiv_id]->
-                            rnas[rna_idx]->length - j >= 3) {
+                        rnas[rna_idx]->length - j >= 3) {
 
-                        int t_k;
+                    int t_k;
 
 
-                            start_protein_pos =
-                                    start_protein_pos >= internal_organisms_[indiv_id]->length() ?
-                                    start_protein_pos - internal_organisms_[indiv_id]->length()
-                                                                            : start_protein_pos;
+                    start_protein_pos =
+                            start_protein_pos >= internal_organisms_[indiv_id]->length() ?
+                            start_protein_pos - internal_organisms_[indiv_id]->length()
+                                                                                         : start_protein_pos;
 
-                            is_protein = internal_organisms_[indiv_id]->dna_->protein_stop(start_protein_pos);
-
+                    is_protein = internal_organisms_[indiv_id]->dna_->protein_stop(start_protein_pos);
 
 
                     if (is_protein) {
-                                int prot_length = -1;
+                        int prot_length = -1;
 
                         t_k = start_protein_pos + 2 >= internal_organisms_[indiv_id]->length() ?
                               start_protein_pos - internal_organisms_[indiv_id]->length() + 2 :
                               start_protein_pos + 2;
 
-                                if (internal_organisms_[indiv_id]->
-                                        rnas[rna_idx]->start_prot[protein_idx] + 13 < t_k) {
-                                    prot_length = t_k -
-                                                  (internal_organisms_[indiv_id]->
-                                                          rnas[rna_idx]->start_prot[protein_idx] +
-                                                   13);
-                                } else {
-                                    prot_length = internal_organisms_[indiv_id]->length() -
-                                                  (internal_organisms_[indiv_id]->
-                                                          rnas[rna_idx]->start_prot[protein_idx] +
-                                                   13) + t_k;
-                                }
+                        if (internal_organisms_[indiv_id]->
+                                rnas[rna_idx]->start_prot[protein_idx] + 13 < t_k) {
+                            prot_length = t_k -
+                                          (internal_organisms_[indiv_id]->
+                                                  rnas[rna_idx]->start_prot[protein_idx] +
+                                           13);
+                        } else {
+                            prot_length = internal_organisms_[indiv_id]->length() -
+                                          (internal_organisms_[indiv_id]->
+                                                  rnas[rna_idx]->start_prot[protein_idx] +
+                                           13) + t_k;
+                        }
 
-                                if (prot_length >= 3) {
-                                    int glob_prot_idx = internal_organisms_[indiv_id]->protein_count_;
-                                    internal_organisms_[indiv_id]->protein_count_ =
-                                            internal_organisms_[indiv_id]->protein_count_ + 1;
+                        if (prot_length >= 3) {
+                            int glob_prot_idx = internal_organisms_[indiv_id]->protein_count_;
+                            internal_organisms_[indiv_id]->protein_count_ =
+                                    internal_organisms_[indiv_id]->protein_count_ + 1;
 
+                            internal_organisms_[indiv_id]->
+                                    proteins[glob_prot_idx] = new Protein(
                                     internal_organisms_[indiv_id]->
-                                                proteins[glob_prot_idx] = new Protein(
-                                            internal_organisms_[indiv_id]->
-                                                        rnas[rna_idx]->start_prot[protein_idx], t_k,
-                                                prot_length,
-                                            internal_organisms_[indiv_id]->rnas[rna_idx]->e
-                                        );
+                                            rnas[rna_idx]->start_prot[protein_idx], t_k,
+                                    prot_length,
+                                    internal_organisms_[indiv_id]->rnas[rna_idx]->e
+                            );
 
 
-                                    internal_organisms_[indiv_id]->
-                                            rnas[rna_idx]->is_coding_ = true;
-                                }
-                                break;
-                            }
-
-                            start_protein_pos += 3;
-                            start_protein_pos =
-                                    start_protein_pos >= internal_organisms_[indiv_id]->length() ?
-                                    start_protein_pos - internal_organisms_[indiv_id]->length()
-                                                                            : start_protein_pos;
-                        j += 3;
+                            internal_organisms_[indiv_id]->
+                                    rnas[rna_idx]->is_coding_ = true;
+                        }
+                        break;
                     }
+
+                    start_protein_pos += 3;
+                    start_protein_pos =
+                            start_protein_pos >= internal_organisms_[indiv_id]->length() ?
+                            start_protein_pos - internal_organisms_[indiv_id]->length()
+                                                                                         : start_protein_pos;
+                    j += 3;
                 }
             }
         }
+    }
 }
 
 /**
@@ -1318,20 +1315,20 @@ void ExpManager::selection(int indiv_id) {
     int selection_scope_y = 3;
     int neighborhood_size = 9;
 
-    double *  local_fit_array   = new double[neighborhood_size];
-    double *  local_meta_array   = new double[neighborhood_size];
-    double *  probs             = new double[neighborhood_size];
-    int   count             = 0;
-    double    sum_local_fit     = 0.0;
+    double *local_fit_array = new double[neighborhood_size];
+    double *local_meta_array = new double[neighborhood_size];
+    double *probs = new double[neighborhood_size];
+    int count = 0;
+    double sum_local_fit = 0.0;
 
-    int * indiv_index = new int[neighborhood_size];
+    int *indiv_index = new int[neighborhood_size];
 
     int32_t x = indiv_id / grid_height_;
     int32_t y = indiv_id % grid_height_;
 
-    int cur_x,cur_y;
+    int cur_x, cur_y;
 
-    for (int8_t i = -1 ; i < selection_scope_x-1 ; i++) {
+    for (int8_t i = -1; i < selection_scope_x - 1; i++) {
         for (int8_t j = -1; j < selection_scope_y - 1; j++) {
             cur_x = (x + i + grid_width_) % grid_width_;
             cur_y = (y + j + grid_height_) % grid_height_;
@@ -1346,8 +1343,8 @@ void ExpManager::selection(int indiv_id) {
         }
     }
 
-    for(int16_t i = 0 ; i < neighborhood_size ; i++) {
-        probs[i] = local_fit_array[i]/sum_local_fit;
+    for (int16_t i = 0; i < neighborhood_size; i++) {
+        probs[i] = local_fit_array[i] / sum_local_fit;
     }
 
     auto rng = std::move(rng_->gen(indiv_id, Threefry::REPROD));
@@ -1356,14 +1353,14 @@ void ExpManager::selection(int indiv_id) {
     int x_offset = (found_org / selection_scope_x) - 1;
     int y_offset = (found_org % selection_scope_y) - 1;
 
-    delete [] indiv_index;
-    delete [] local_fit_array;
-    delete [] local_meta_array;
-    delete [] probs;
+    delete[] indiv_index;
+    delete[] local_fit_array;
+    delete[] local_meta_array;
+    delete[] probs;
 
 
-    next_generation_reproducer_[indiv_id] = ((x+x_offset+grid_width_)  % grid_width_)*grid_height_+
-                                            ((y+y_offset+grid_height_) % grid_height_);
+    next_generation_reproducer_[indiv_id] = ((x + x_offset + grid_width_) % grid_width_) * grid_height_ +
+                                            ((y + y_offset + grid_height_) % grid_height_);
 }
 
 /**
@@ -1394,18 +1391,18 @@ void ExpManager::run_evolution(int nb_gen) {
         compute_fitness(indiv_id, selection_pressure_);
     }
 
-    printf("Running evolution from %d to %d\n",AeTime::time(),AeTime::time()+nb_gen);
+    printf("Running evolution from %d to %d\n", AeTime::time(), AeTime::time() + nb_gen);
     bool firstGen = true;
-    for (int gen = 0; gen < nb_gen+1; gen++) {
+    for (int gen = 0; gen < nb_gen + 1; gen++) {
         AeTime::plusplus();
 
-      high_resolution_clock::time_point t1 = high_resolution_clock::now();
-      run_a_step(w_max_, selection_pressure_,firstGen);
-      high_resolution_clock::time_point t2 = high_resolution_clock::now();
-      auto duration_gpu_start_stop_rna = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        high_resolution_clock::time_point t1 = high_resolution_clock::now();
+        run_a_step(w_max_, selection_pressure_, firstGen);
+        high_resolution_clock::time_point t2 = high_resolution_clock::now();
+        auto duration_gpu_start_stop_rna = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         firstGen = false;
-        printf("Generation %d : Best individual fitness %e\n",AeTime::time(),best_indiv->fitness);
+        printf("Generation %d : Best individual fitness %e\n", AeTime::time(), best_indiv->fitness);
 
         if (AeTime::time() % backup_step_ == 0) {
             printf("Save !!\n");
@@ -1414,11 +1411,12 @@ void ExpManager::run_evolution(int nb_gen) {
     }
 }
 
+#ifdef USE_CUDA
 
 void ExpManager::run_evolution_on_gpu(int nb_gen) {
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
   cout << "Transfer" << endl;
-  //transfer_in(this, true);
+  transfer_in(this, true);
   high_resolution_clock::time_point t2 = high_resolution_clock::now();
   auto duration_transfer_in = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
   cout << "Transfer done in " << duration_transfer_in << endl;
@@ -1466,3 +1464,5 @@ void ExpManager::run_evolution_on_gpu(int nb_gen) {
     }
   }
 }
+
+#endif

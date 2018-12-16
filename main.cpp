@@ -32,9 +32,9 @@
 
 #include "ExpManager.h"
 
-void print_help(char* prog_path) {
+void print_help(char *prog_path) {
     // Get the program file-name in prog_name (strip prog_path of the path)
-    char* prog_name; // No new, it will point to somewhere inside prog_path
+    char *prog_name; // No new, it will point to somewhere inside prog_path
     if ((prog_name = strrchr(prog_path, '/'))) prog_name++;
     else prog_name = prog_path;
 
@@ -68,7 +68,7 @@ void print_help(char* prog_path) {
     printf("  -r, --resume RESUME_STEP\tResume the simulation from the RESUME_STEP generations\n");
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
 
     int nbstep = -1;
     int width = -1;
@@ -79,27 +79,27 @@ int main(int argc, char* argv[]) {
     int backup_step = -1;
     int seed = -1;
 
-    const char * options_list = "e:::n:w:h:m:g:b:r:s:";
+    const char *options_list = "e:::n:w:h:m:g:b:r:s:";
     static struct option long_options_list[] = {
             // Print help
-            { "help",     no_argument,        NULL, 'e' },
+            {"help",          no_argument,       NULL, 'e'},
             // Number of generations to be run
-            { "nsteps",  required_argument,  NULL, 'n' },
+            {"nsteps",        required_argument, NULL, 'n'},
             // Width size of the grid
-            { "width", required_argument,  NULL, 'w' },
+            {"width",         required_argument, NULL, 'w'},
             // Height size of the grid
-            { "height", required_argument,  NULL, 'h' },
+            {"height",        required_argument, NULL, 'h'},
             // Mutation rate
-            { "mutation_rate", required_argument,  NULL, 'm' },
+            {"mutation_rate", required_argument, NULL, 'm'},
             // Size of the initial genome
-            { "genome_size", required_argument,  NULL, 'g' },
+            {"genome_size",   required_argument, NULL, 'g'},
             // Resuming from generation X
-            { "resume", required_argument,  NULL, 'r' },
+            {"resume",        required_argument, NULL, 'r'},
             // Backup step
-            { "backup_step", required_argument,  NULL, 'b' },
+            {"backup_step",   required_argument, NULL, 'b'},
             // Seed
-            { "seed", required_argument,  NULL, 's' },
-            { 0, 0, 0, 0 }
+            {"seed",          required_argument, NULL, 's'},
+            {0, 0, 0,                                  0}
     };
 
 
@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
     printf("Start ExpManager\n");
 
     if (resume >= 0) {
-        if ((width != -1) || (height != -1)|| (mutation_rate != -1.0) || (genome_size != -1) ||
+        if ((width != -1) || (height != -1) || (mutation_rate != -1.0) || (genome_size != -1) ||
             (backup_step != -1) || (seed != -1)) {
             printf("Parameter(s) can not change during the simulation (i.e. when resuming a simulation, parameter(s) can not change)\n");
             exit(EXIT_FAILURE);
@@ -175,17 +175,22 @@ int main(int argc, char* argv[]) {
     }
 
 
-
     ExpManager *exp_manager;
     if (resume == -1) {
         exp_manager = new ExpManager(height, width, seed, mutation_rate, genome_size, 0.03, 100,
-                                                 backup_step);
+                                     backup_step);
     } else {
         printf("Resuming...\n");
         exp_manager = new ExpManager(resume);
     }
 
+#ifdef USE_CUDA
+    printf("Running on GPU\n");
     exp_manager->run_evolution_on_gpu(nbstep);
+#else
+    printf("Running only on CPU\n");
+    exp_manager->run_evolution(nbstep);
+#endif
 
     delete exp_manager;
 
