@@ -569,7 +569,7 @@ void ExpManager::start_stop_RNA(int indiv_id) {
 }
 
 /**
- * Optimize version that do not need to search the whole Dna for promoters
+ * Optimized version that does not need to search the whole Dna for promoters
  */
 void ExpManager::opt_prom_compute_RNA(int indiv_id) {
 
