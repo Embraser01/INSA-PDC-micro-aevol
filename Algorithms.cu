@@ -239,7 +239,7 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
-            if (dna_mutator_array_[indiv_id]->hasMutate()) {
+            if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
                 exp_m->opt_prom_compute_RNA(indiv_id);
             }
         }
