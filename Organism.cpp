@@ -269,9 +269,10 @@ void Organism::remove_promoters_around(int32_t pos) {
 
 void Organism::remove_promoters_around(int32_t pos_1, int32_t pos_2) {
     if (mod(pos_1 - pos_2, dna_->length()) >= PROM_SIZE) {
-        remove_promoters_starting_between(mod(pos_1 - PROM_SIZE + 1,
-                                                             dna_->length()),
-                                                  pos_2);
+        remove_promoters_starting_between(
+                mod(pos_1 - PROM_SIZE + 1, dna_->length()),
+                pos_2
+        );
     }
     else {
         remove_all_promoters();
@@ -313,8 +314,9 @@ void Organism::move_all_promoters_after(int32_t pos, int32_t delta_pos) {
 void Organism::look_for_new_promoters_around(int32_t pos_1, int32_t pos_2) {
     if (dna_->length() >= PROM_SIZE) {
         look_for_new_promoters_starting_between(
-                mod(pos_1 - PROM_SIZE + 1,
-                           dna_->length()), pos_2);
+                mod(pos_1 - PROM_SIZE + 1, dna_->length()),
+                pos_2
+        );
     }
 }
 
