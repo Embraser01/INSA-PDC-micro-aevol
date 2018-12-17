@@ -1,44 +1,24 @@
 #include "Algorithms.h"
 #include "Algorithms.cuh"
 
+#include <sys/stat.h>
+#include <chrono>
+#include <iostream>
+// #include <cstdint>
+// #include <stdio.h>
+// #include <unistd.h>
+
+#include <cuda.h>
+#include <cuda_profiler_api.h>
+
 #include "ExpManager.h"
 #include "ThreefryGPU.h"
 #include "GPUDna.cuh"
-
-#include <cmath>
-#include <map>
-#include <algorithm>
-#include <sys/stat.h>
-#include <err.h>
-#include<chrono>
-#include <iostream>
-
 #include "AeTime.h"
-#include "Threefry.h"
-#include "DnaMutator.h"
-#include "Stats.h"
-#include "ExpManager.h"
-#include "Algorithms.h"
-#include "AeTime.h"
-#include "Promoter.h"
-#include "RNA.h"
-#include "Protein.h"
-#include "Organism.h"
-#include "Gaussian.h"
-
-using namespace std::chrono;
-
-
-#include <cstdint>
-#include <stdio.h>
-#include <unistd.h>
-
-#include <iostream>
-
-#include<cuda.h>
-#include<cuda_profiler_api.h>
 
 using namespace std;
+using namespace std::chrono;
+
 
 #define DEBUG 1
 
