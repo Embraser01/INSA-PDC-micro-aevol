@@ -8,7 +8,7 @@ add_definitions(-DSFMT_MEXP=607)
 option(USE_CUDA "Use CUDA" ON)
 
 # Create project library (without any CUDA files)
-add_library(mini_aevol
+set(SOURCE_FILES
         ExpManager.cpp
         ExpManager.h
         AeTime.cpp
@@ -28,17 +28,11 @@ add_library(mini_aevol
         Stats.h
         Gaussian.h
         Threefry.cpp
-        Dna.cpp
-        )
+        Dna.cpp)
 
+add_library(mini_aevol ${SOURCE_FILES})
 target_include_directories(mini_aevol INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Add ZLIB as dependency
-find_package(ZLIB REQUIRED)
-if (ZLIB_FOUND)
-    include_directories(${ZLIB_INCLUDE_DIRS})
-    target_link_libraries(mini_aevol PUBLIC sfmt PUBLIC ${ZLIB_LIBRARIES})
-endif (ZLIB_FOUND)
 
 # Create the executable without CUDA
 add_executable(pdc_mini_aevol main.cpp)
@@ -48,13 +42,28 @@ target_link_libraries(pdc_mini_aevol PUBLIC mini_aevol)
 if (USE_CUDA)
     enable_language("CUDA")
 
+    # Create the core lib with custom definitions
+    add_library(mini_aevol_gpu ${SOURCE_FILES})
+    target_include_directories(mini_aevol_gpu INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(mini_aevol_gpu PUBLIC USE_CUDA=1)
+
     # CUDA Files
     set(CMAKE_CUDA_FLAGS "-std=c++11 -arch=compute_60 -lineinfo")
-    target_compile_definitions(mini_aevol PRIVATE USE_CUDA=1)
-    add_library(cuda_part STATIC Algorithms.cu ThreefryGPU.cu)
+    add_library(cuda_part STATIC Algorithms.cu)
     set_target_properties(cuda_part PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
     # Executable
     add_executable(pdc_mini_aevol_gpu main.cpp)
-    target_link_libraries(pdc_mini_aevol_gpu PUBLIC mini_aevol cuda_part)
+    target_link_libraries(pdc_mini_aevol_gpu PUBLIC mini_aevol_gpu cuda_part)
 endif ()
+
+# Add ZLIB as dependency
+find_package(ZLIB REQUIRED)
+if (ZLIB_FOUND)
+    include_directories(${ZLIB_INCLUDE_DIRS})
+    target_link_libraries(mini_aevol PUBLIC sfmt PUBLIC ${ZLIB_LIBRARIES})
+
+    if (USE_CUDA)
+        target_link_libraries(mini_aevol_gpu PUBLIC sfmt PUBLIC ${ZLIB_LIBRARIES})
+    endif ()
+endif (ZLIB_FOUND)
