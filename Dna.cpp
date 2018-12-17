@@ -56,12 +56,8 @@ int Dna::promoter_at(int pos) {
     // Searching for the promoter
     prom_dist[motif_id] =
         PROM_SEQ[motif_id] ==
-        seq_[
-            pos + motif_id >= seq_.size() ? pos +
-                                            motif_id -
-                                            seq_.size()
-                                          : pos +
-                                            motif_id]
+        seq_[pos + motif_id >= seq_.size() ? pos + motif_id - seq_.size()
+                                          : pos + motif_id]
         ? 0
         : 1;
 

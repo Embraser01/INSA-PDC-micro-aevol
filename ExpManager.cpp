@@ -728,35 +728,25 @@ void ExpManager::compute_RNA(int indiv_id) {
  * @param indiv_id : Unique identification number of the organism
  */
 void ExpManager::start_protein(int indiv_id) {
-    for (int rna_idx = 0; rna_idx <
-                          (int) internal_organisms_[indiv_id]->rna_count_; rna_idx++) {
-        {
-            if (internal_organisms_[indiv_id]->rnas[rna_idx]->is_init_) {
-                int c_pos = internal_organisms_[indiv_id]->rnas[rna_idx]->begin;
-                if (internal_organisms_[indiv_id]->rnas[rna_idx]->length >= 22) {
+    shared_ptr<Organism> &currentOrganism = internal_organisms_[indiv_id];
 
-                    c_pos += 22;
-                    c_pos =
-                            c_pos >= internal_organisms_[indiv_id]->length() ?
-                            c_pos - internal_organisms_[indiv_id]->length()
-                                                                             : c_pos;
+    for (int rna_idx = 0; rna_idx < currentOrganism->rna_count_; rna_idx++) {
+        if (currentOrganism->rnas[rna_idx]->is_init_) {
+            int c_pos = currentOrganism->rnas[rna_idx]->begin;
 
-                    while (c_pos !=
-                           internal_organisms_[indiv_id]->rnas[rna_idx]->end) {
+            if (currentOrganism->rnas[rna_idx]->length >= 22) {
+                c_pos += 22;
+                c_pos = c_pos >= currentOrganism->length() ? c_pos - currentOrganism->length()
+                                                           : c_pos;
 
-
-                        if (internal_organisms_[indiv_id]->dna_->shine_dal_start(c_pos)) {
-                            internal_organisms_[indiv_id]->rnas[rna_idx]->start_prot.
-                                    push_back(c_pos);
-                        }
-
-
-                        c_pos++;
-                        c_pos =
-                                c_pos >= internal_organisms_[indiv_id]->length() ?
-                                c_pos - internal_organisms_[indiv_id]->length()
-                                                                                 : c_pos;
+                while (c_pos != currentOrganism->rnas[rna_idx]->end) {
+                    if (currentOrganism->dna_->shine_dal_start(c_pos)) {
+                        currentOrganism->rnas[rna_idx]->start_prot.push_back(c_pos);
                     }
+
+                    c_pos++;
+                    c_pos = c_pos >= currentOrganism->length() ? c_pos - currentOrganism->length()
+                                                               : c_pos;
                 }
             }
         }
@@ -1159,25 +1149,18 @@ void ExpManager::compute_phenotype(int indiv_id) {
         }
     }
 
-    for (int protein_idx = 0; protein_idx <
-                              (int) internal_organisms_[indiv_id]->protein_count_; protein_idx++) {
-        if (internal_organisms_[indiv_id]->proteins[protein_idx]->is_init_) {
-            if (fabs(
-                    internal_organisms_[indiv_id]->proteins[protein_idx]->w) >=
-                1e-15 &&
-                fabs(
-                        internal_organisms_[indiv_id]->proteins[protein_idx]->h) >=
-                1e-15) {
+    for (int protein_idx = 0; protein_idx < internal_organisms_[indiv_id]->protein_count_; protein_idx++) {
 
-                if (internal_organisms_[indiv_id]->proteins[protein_idx]->is_functional) {
+        Protein *&currentProtein = internal_organisms_[indiv_id]->proteins[protein_idx];
+        if (currentProtein->is_init_) {
+
+            if (fabs(currentProtein->w) >= 1e-15 && fabs(currentProtein->h) >= 1e-15) {
+
+                if (currentProtein->is_functional) {
                     // Compute triangle points' coordinates
-                    double x0 =
-                            internal_organisms_[indiv_id]->proteins[protein_idx]->m -
-                            internal_organisms_[indiv_id]->proteins[protein_idx]->w;
-                    double x1 = internal_organisms_[indiv_id]->proteins[protein_idx]->m;
-                    double x2 =
-                            internal_organisms_[indiv_id]->proteins[protein_idx]->m +
-                            internal_organisms_[indiv_id]->proteins[protein_idx]->w;
+                    double x0 = currentProtein->m - currentProtein->w;
+                    double x1 = currentProtein->m;
+                    double x2 = currentProtein->m + currentProtein->w;
 
                     int ix0 = (int) (x0 * 300);
                     int ix1 = (int) (x1 * 300);
@@ -1188,50 +1171,39 @@ void ExpManager::compute_phenotype(int indiv_id) {
                     if (ix2 < 0) ix2 = 0; else if (ix2 > (299)) ix2 = 299;
 
                     // Compute the first equation of the triangle
-                    double incY =
-                            (internal_organisms_[indiv_id]->proteins[protein_idx]->h *
-                             internal_organisms_[indiv_id]->proteins[protein_idx]->e) /
-                            (ix1 - ix0);
+                    double incY = (currentProtein->h * currentProtein->e) / (ix1 - ix0);
                     int count = 1;
 
                     // Updating value between x0 and x1
                     for (int i = ix0 + 1; i < ix1; i++) {
-                        if (internal_organisms_[indiv_id]->proteins[protein_idx]->h > 0)
+                        if (currentProtein->h > 0)
                             activ_phenotype[i] += (incY * (count++));
                         else
                             inhib_phenotype[i] += (incY * (count++));
-
                     }
 
 
-                    if (internal_organisms_[indiv_id]->proteins[protein_idx]->h > 0)
-                        activ_phenotype[ix1] +=
-                                (internal_organisms_[indiv_id]->proteins[protein_idx]->h *
-                                 internal_organisms_[indiv_id]->proteins[protein_idx]->e);
+                    if (currentProtein->h > 0)
+                        activ_phenotype[ix1] += (currentProtein->h * currentProtein->e);
                     else
-                        inhib_phenotype[ix1] +=
-                                (internal_organisms_[indiv_id]->proteins[protein_idx]->h *
-                                 internal_organisms_[indiv_id]->proteins[protein_idx]->e);
+                        inhib_phenotype[ix1] += (currentProtein->h * currentProtein->e);
 
 
                     // Compute the second equation of the triangle
-                    incY =
-                            (internal_organisms_[indiv_id]->proteins[protein_idx]->h *
-                             internal_organisms_[indiv_id]->proteins[protein_idx]->e) /
-                            (ix2 - ix1);
+                    incY = (currentProtein->h * currentProtein->e) / (ix2 - ix1);
                     count = 1;
 
                     // Updating value between x1 and x2
                     for (int i = ix1 + 1; i < ix2; i++) {
-                        if (internal_organisms_[indiv_id]->proteins[protein_idx]->h > 0)
+                        if (currentProtein->h > 0)
                             activ_phenotype[i] +=
-                                    ((internal_organisms_[indiv_id]->proteins[protein_idx]->h *
-                                      internal_organisms_[indiv_id]->proteins[protein_idx]->e) -
+                                    ((currentProtein->h *
+                                      currentProtein->e) -
                                      (incY * (count++)));
                         else
                             inhib_phenotype[i] +=
-                                    ((internal_organisms_[indiv_id]->proteins[protein_idx]->h *
-                                      internal_organisms_[indiv_id]->proteins[protein_idx]->e) -
+                                    ((currentProtein->h *
+                                      currentProtein->e) -
                                      (incY * (count++)));
                     }
 

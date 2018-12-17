@@ -403,9 +403,7 @@ void Organism::insert_promoters(std::list<Promoter*>& promoters_to_insert) {
 void Organism::remove_all_promoters() {
     prom_pos.clear();
 
-    for (auto it = promoters.begin(),
-                 nextit = it;
-         it != promoters.end();
+    for (auto it = promoters.begin(),nextit = it;it != promoters.end();
          it = nextit) {
         delete it->second;
         nextit = next(it);
