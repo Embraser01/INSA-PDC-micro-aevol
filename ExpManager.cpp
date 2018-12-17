@@ -353,8 +353,6 @@ void ExpManager::do_mutation(int indiv_id) {
                 next_generation_reproducer_[indiv_id];
 
         internal_organisms_[indiv_id]->apply_mutations();
-        internal_organisms_[indiv_id]->remove_all_promoters();
-        internal_organisms_[indiv_id]->locate_promoters();
     } else {
         int parent_id = next_generation_reproducer_[indiv_id];
 
@@ -645,8 +643,9 @@ void ExpManager::opt_prom_compute_RNA(int indiv_id) {
                     currentOrganism->rnas[glob_rna_idx] = new RNA(
                             prom->pos,
                             rna_end,
-                            1.0 -
-                            std::fabs(((float) prom->error)) / 5.0, rna_length);
+                            1.0 - std::fabs(((float) prom->error)) / 5.0,
+                            rna_length
+                    );
                 }
             }
         }
