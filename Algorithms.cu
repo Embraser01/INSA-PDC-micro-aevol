@@ -41,11 +41,10 @@ using namespace std::chrono;
 using namespace std;
 
 #define DEBUG 1
+
 // Convenience function for checking CUDA runtime API results
 // can be wrapped around any runtime API call. No-op in release builds.
-inline
-cudaError_t checkCuda(cudaError_t result)
-{
+inline cudaError_t checkCuda(cudaError_t result) {
 #if defined(DEBUG) || defined(_DEBUG)
     if (result != cudaSuccess) {
         fprintf(stderr, "CUDA Runtime Error: %s\n",
@@ -65,9 +64,9 @@ constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
  * @param exp_m
  * @param first_gen
  */
-void transfer_in(ExpManager* exp_m, bool first_gen) {
+void transfer_in(ExpManager *exp_m, bool first_gen) {
     exp_m->rng_->initDevice();
-    checkCuda(cudaMalloc((void**) &gpu_counters,
+    checkCuda(cudaMalloc((void **) &gpu_counters,
                          exp_m->rng_->counters().size() *
                          sizeof(unsigned long long)));
 
@@ -79,21 +78,21 @@ void transfer_in(ExpManager* exp_m, bool first_gen) {
 }
 
 
-__device__ int32_t Threefry::Device::roulette_random(double* probs, int32_t nb_elts)
-{
+__device__ int32_t
+
+Threefry::Device::roulette_random(double *probs, int32_t nb_elts) {
     double pick_one = 0.0;
 
-    while (pick_one == 0.0)
-    {
+    while (pick_one == 0.0) {
         pick_one = randomDouble();
     }
 
-    int32_t found_org = 0;
+    int32_t
+    found_org = 0;
 
     pick_one -= probs[0];
-    while (pick_one > 0)
-    {
-        assert(found_org<nb_elts-1);
+    while (pick_one > 0) {
+        assert(found_org < nb_elts - 1);
 
         pick_one -= probs[++found_org];
     }
@@ -101,30 +100,27 @@ __device__ int32_t Threefry::Device::roulette_random(double* probs, int32_t nb_e
 }
 
 
-__constant__ double cof[6] = {  76.18009172947146,
-                                -86.50532032941677,
-                                24.01409824083091,
-                                -1.231739572450155,
-                                0.1208650973866179e-2,
-                                -0.5395239384953e-5 };
-
+__constant__ double cof[6] = {76.18009172947146,
+                              -86.50532032941677,
+                              24.01409824083091,
+                              -1.231739572450155,
+                              0.1208650973866179e-2,
+                              -0.5395239384953e-5};
 
 
 // Returns the value ln[gamma(X)] for X.
 // The gamma function is defined by the integral  gamma(z) = int(0, +inf, t^(z-1).e^(-t)dt).
 // When the argument z is an integer, the gamma function is just the familiar factorial
 // function, but offset by one, n! = gamma(n + 1).
-__device__ static double gammln(double X)
-{
+__device__ static double gammln(double X) {
     double x, y, tmp, ser;
 
     y = x = X;
     tmp = x + 5.5;
-    tmp -= (x+0.5) * log(tmp);
+    tmp -= (x + 0.5) * log(tmp);
     ser = 1.000000000190015;
 
-    for (int8_t j = 0 ; j <= 5 ; j++)
-    {
+    for (int8_t j = 0; j <= 5; j++) {
         ser += cof[j] / ++y;
     }
 
@@ -132,9 +128,7 @@ __device__ static double gammln(double X)
 }
 
 
-__device__ 
-int32_t Threefry::Device::binomial_random(int32_t nb_drawings, double prob)
-{
+__device__ int32_t Threefry::Device::binomial_random(int32_t nb_drawings, double prob) {
     int32_t nb_success;
 
     // The binomial distribution is invariant under changing
@@ -212,12 +206,11 @@ int32_t Threefry::Device::binomial_random(int32_t nb_drawings, double prob)
     return nb_success;
 }
 
-__device__ static int mod(int a, int b)
-{
+__device__ static int mod(int a, int b) {
 
     assert(b > 0);
 
-    while (a < 0)  a += b;
+    while (a < 0) a += b;
     while (a >= b) a -= b;
 
     return a;
@@ -225,14 +218,8 @@ __device__ static int mod(int a, int b)
 
 /**
  * Run a step on the GPU
- * @param nb_indiv
- * @param w_max
- * @param selection_pressure
- * @param grid_width
- * @param grid_height
- * @param mutation_rate
  */
-void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double selection_pressure, int grid_width, int grid_height, double mutation_rate, bool first_gen){
+void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressure, bool first_gen) {
 
     // Running the simulation process for each organism
     {
@@ -241,21 +228,23 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
             exp_m->selection(indiv_id);
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
-        auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             exp_m->do_mutation(indiv_id);
         }
         t2 = high_resolution_clock::now();
-        auto duration_mutation = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_mutation = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
-            exp_m->opt_prom_compute_RNA(indiv_id);
+            if (dna_mutator_array_[indiv_id]->hasMutate()) {
+                exp_m->opt_prom_compute_RNA(indiv_id);
+            }
         }
         t2 = high_resolution_clock::now();
-        auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
@@ -264,7 +253,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_start_protein = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_start_protein = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -274,7 +263,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_compute_protein = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_compute_protein = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -284,7 +273,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_translate_protein = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_translate_protein = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -294,7 +283,7 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_compute_phenotype = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_compute_phenotype = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
         t1 = high_resolution_clock::now();
@@ -304,14 +293,16 @@ void run_a_step_on_GPU(ExpManager* exp_m, int nb_indiv, double w_max, double sel
             }
         }
         t2 = high_resolution_clock::now();
-        auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
+        auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         //transfer_out(this);
 
 
-        std::cout<<"LOG,"<<duration_selection<<","<<duration_mutation<<","<<duration_start_stop_RNA
-                 <<","<<duration_start_protein<<","<<duration_compute_protein<<","<<duration_translate_protein
-                 <<","<<duration_compute_phenotype<<","<<duration_compute_phenotype<<","<<duration_compute_fitness<<std::endl;
+        std::cout << "LOG," << duration_selection << "," << duration_mutation << "," << duration_start_stop_RNA
+                  << "," << duration_start_protein << "," << duration_compute_protein << ","
+                  << duration_translate_protein
+                  << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
+                  << duration_compute_fitness << std::endl;
     }
     for (int indiv_id = 1; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         exp_m->prev_internal_organisms_[indiv_id] = exp_m->internal_organisms_[indiv_id];
