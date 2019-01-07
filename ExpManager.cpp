@@ -540,26 +540,27 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
  * @param indiv_id : Unique identification number of the organism
  */
 void ExpManager::start_stop_RNA(int indiv_id) {
+    shared_ptr<Organism> &currentOrganism = internal_organisms_[indiv_id];
 
-    for (int dna_pos = 0; dna_pos < internal_organisms_[indiv_id]->length(); dna_pos++) {
-        if (internal_organisms_[indiv_id]->length() >= PROM_SIZE) {
-            int dist_lead = internal_organisms_[indiv_id]->dna_->promoter_at(dna_pos);
+    for (int dna_pos = 0; dna_pos < currentOrganism->length(); dna_pos++) {
+        if (currentOrganism->length() >= PROM_SIZE) {
+            int dist_lead = currentOrganism->dna_->promoter_at(dna_pos);
 
             if (dist_lead <= 4) {
                 Promoter *nprom = new Promoter(dna_pos, dist_lead);
-                int prom_idx = internal_organisms_[indiv_id]->count_prom;
-                internal_organisms_[indiv_id]->count_prom =
-                        internal_organisms_[indiv_id]->count_prom + 1;
+                int prom_idx = currentOrganism->count_prom;
+                currentOrganism->count_prom =
+                        currentOrganism->count_prom + 1;
 
-                internal_organisms_[indiv_id]->promoters[prom_idx] = nprom;
-                internal_organisms_[indiv_id]->prom_pos[dna_pos] = prom_idx;
+                currentOrganism->promoters[prom_idx] = nprom;
+                currentOrganism->prom_pos[dna_pos] = prom_idx;
             }
 
             // Computing if a terminator exists at that position
-            int dist_term_lead = internal_organisms_[indiv_id]->dna_->terminator_at(dna_pos);
+            int dist_term_lead = currentOrganism->dna_->terminator_at(dna_pos);
 
             if (dist_term_lead == 4) {
-                internal_organisms_[indiv_id]->terminators.insert(
+                currentOrganism->terminators.insert(
                         dna_pos);
             }
         }
@@ -577,8 +578,7 @@ void ExpManager::opt_prom_compute_RNA(int indiv_id) {
     currentOrganism->rnas.clear();
     currentOrganism->terminators.clear();
 
-    currentOrganism->rnas.resize(
-            currentOrganism->promoters.size());
+    currentOrganism->rnas.resize(currentOrganism->promoters.size());
 
     for (int prom_idx = 0; prom_idx < currentOrganism->promoters.size(); prom_idx++) {
 
@@ -586,10 +586,7 @@ void ExpManager::opt_prom_compute_RNA(int indiv_id) {
             int rna_idx = prom_idx;
             Promoter *prom = currentOrganism->promoters[rna_idx];
 
-            int prom_pos;
-            double prom_error;
-            prom_pos = prom->pos;
-            prom_error = fabs(((float) prom->error));
+            int prom_pos = prom->pos;
 
             /* Search for terminators */
             int cur_pos = prom_pos + 22;
@@ -601,19 +598,14 @@ void ExpManager::opt_prom_compute_RNA(int indiv_id) {
             bool no_terminator = false;
             int term_dist_leading = 0;
 
-            int loop_size = 0;
-
             while (!terminator_found) {
-                loop_size++;
-                for (int t_motif_id = 0; t_motif_id < 4; t_motif_id++)
-                    term_dist_leading = currentOrganism->dna_->terminator_at(cur_pos);
+                term_dist_leading = currentOrganism->dna_->terminator_at(cur_pos);
 
                 if (term_dist_leading == 4)
                     terminator_found = true;
                 else {
                     cur_pos = cur_pos + 1 >= currentOrganism->length() ? cur_pos + 1 - currentOrganism->length()
                                                                        : cur_pos + 1;
-                    term_dist_leading = 0;
                     if (cur_pos == start_pos) {
                         no_terminator = true;
                         terminator_found = true;
@@ -722,7 +714,7 @@ void ExpManager::compute_RNA(int indiv_id) {
 }
 
 /**
- * Search for Shine Dal sequence and Start sequence deliminating the start of genes within one of the RNA of an Organism
+ * Search for Shine Dal sequence and Start sequence delimiting the start of genes within one of the RNA of an Organism
  *
  * @param indiv_id : Unique identification number of the organism
  */
@@ -772,112 +764,110 @@ void ExpManager::compute_protein(int indiv_id) {
     for (int rna_idx = 0; rna_idx < (int) currentOrganism->rna_count_; rna_idx++) {
         RNA *&currentRNA = currentOrganism->rnas[rna_idx];
 
-        if (currentRNA->is_init_) {
-            for (int protein_idx = 0;
-                 protein_idx < (int) currentRNA->start_prot.size(); protein_idx++) {
-                int start_protein_pos = currentRNA->start_prot[protein_idx] + 13;
+        if (!currentRNA->is_init_) continue;
+
+        for (int protein_idx = 0; protein_idx < (int) currentRNA->start_prot.size(); protein_idx++) {
+            int start_protein_pos = currentRNA->start_prot[protein_idx] + 13;
+
+            int length;
+
+            start_protein_pos =
+                    start_protein_pos >= currentOrganism->length() ? start_protein_pos - currentOrganism->length()
+                                                                   : start_protein_pos;
+
+            if (currentRNA->start_prot[protein_idx] < currentRNA->end) {
+                length = currentRNA->end - currentRNA->start_prot[protein_idx];
+            } else {
+                length = currentOrganism->length() -
+                         currentRNA->start_prot[protein_idx] +
+                         currentRNA->end;
+            }
+
+            length -= 13;
 
 
-                int length;
+            bool is_protein = false;
+
+            length += 1;
+            length = length - (length % 3);
+
+            int j = 0;
+            int transcribed_start = 0;
+
+
+            transcribed_start = currentRNA->begin + 22;
+            transcribed_start = transcribed_start >= currentOrganism->length() ?
+                                transcribed_start - currentOrganism->length()
+                                                                               : transcribed_start;
+
+            if (transcribed_start <= currentRNA->start_prot[protein_idx]) {
+                j = currentRNA->start_prot[protein_idx] -
+                    transcribed_start;
+            } else {
+                j = currentOrganism->length() -
+                    transcribed_start +
+                    currentRNA->start_prot[protein_idx];
+
+            }
+
+
+            j += 13;
+
+
+            while (currentRNA->length - j >= 3) {
+
+                int t_k;
+
 
                 start_protein_pos =
-                        start_protein_pos >= currentOrganism->length() ? start_protein_pos - currentOrganism->length()
+                        start_protein_pos >= currentOrganism->length() ?
+                        start_protein_pos - currentOrganism->length()
                                                                        : start_protein_pos;
 
-                if (currentRNA->start_prot[protein_idx] < currentRNA->end) {
-                    length = currentRNA->end - currentRNA->start_prot[protein_idx];
-                } else {
-                    length = currentOrganism->length() -
-                             currentRNA->start_prot[protein_idx] +
-                             currentRNA->end;
-                }
-
-                length -= 13;
+                is_protein = currentOrganism->dna_->protein_stop(start_protein_pos);
 
 
-                bool is_protein = false;
+                if (is_protein) {
+                    int prot_length = -1;
 
-                length += 1;
-                length = length - (length % 3);
+                    t_k = start_protein_pos + 2 >= currentOrganism->length() ?
+                          start_protein_pos - currentOrganism->length() + 2 :
+                          start_protein_pos + 2;
 
-                int j = 0;
-                int transcribed_start = 0;
-
-
-                transcribed_start = currentRNA->begin + 22;
-                transcribed_start = transcribed_start >= currentOrganism->length() ?
-                                    transcribed_start - currentOrganism->length()
-                                                                                   : transcribed_start;
-
-                if (transcribed_start <= currentRNA->start_prot[protein_idx]) {
-                    j = currentRNA->start_prot[protein_idx] -
-                        transcribed_start;
-                } else {
-                    j = currentOrganism->length() -
-                        transcribed_start +
-                        currentRNA->start_prot[protein_idx];
-
-                }
-
-
-                j += 13;
-
-
-                while (currentRNA->length - j >= 3) {
-
-                    int t_k;
-
-
-                    start_protein_pos =
-                            start_protein_pos >= currentOrganism->length() ?
-                            start_protein_pos - currentOrganism->length()
-                                                                           : start_protein_pos;
-
-                    is_protein = currentOrganism->dna_->protein_stop(start_protein_pos);
-
-
-                    if (is_protein) {
-                        int prot_length = -1;
-
-                        t_k = start_protein_pos + 2 >= currentOrganism->length() ?
-                              start_protein_pos - currentOrganism->length() + 2 :
-                              start_protein_pos + 2;
-
-                        if (currentRNA->start_prot[protein_idx] + 13 < t_k) {
-                            prot_length = t_k -
-                                          (currentRNA->start_prot[protein_idx] +
-                                           13);
-                        } else {
-                            prot_length = currentOrganism->length() -
-                                          (currentRNA->start_prot[protein_idx] +
-                                           13) + t_k;
-                        }
-
-                        if (prot_length >= 3) {
-                            int glob_prot_idx = currentOrganism->protein_count_;
-                            currentOrganism->protein_count_ =
-                                    currentOrganism->protein_count_ + 1;
-
-                            currentOrganism->
-                                    proteins[glob_prot_idx] = new Protein(
-                                    currentRNA->start_prot[protein_idx], t_k,
-                                    prot_length,
-                                    currentRNA->e
-                            );
-
-
-                            currentRNA->is_coding_ = true;
-                        }
-                        break;
+                    if (currentRNA->start_prot[protein_idx] + 13 < t_k) {
+                        prot_length = t_k -
+                                      (currentRNA->start_prot[protein_idx] +
+                                       13);
+                    } else {
+                        prot_length = currentOrganism->length() -
+                                      (currentRNA->start_prot[protein_idx] +
+                                       13) + t_k;
                     }
 
-                    start_protein_pos += 3;
-                    start_protein_pos =
-                            start_protein_pos >= currentOrganism->length() ?
-                            start_protein_pos - currentOrganism->length()
-                                                                           : start_protein_pos;
-                    j += 3;
+                    if (prot_length >= 3) {
+                        int glob_prot_idx = currentOrganism->protein_count_;
+                        currentOrganism->protein_count_ =
+                                currentOrganism->protein_count_ + 1;
+
+                        currentOrganism->
+                                proteins[glob_prot_idx] = new Protein(
+                                currentRNA->start_prot[protein_idx], t_k,
+                                prot_length,
+                                currentRNA->e
+                        );
+
+
+                        currentRNA->is_coding_ = true;
+                    }
+                    break;
                 }
+
+                start_protein_pos += 3;
+                start_protein_pos =
+                        start_protein_pos >= currentOrganism->length() ?
+                        start_protein_pos - currentOrganism->length()
+                                                                       : start_protein_pos;
+                j += 3;
             }
         }
     }
