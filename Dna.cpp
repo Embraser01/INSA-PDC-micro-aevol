@@ -163,12 +163,9 @@ int Dna::codon_at(int pos) {
     int t_pos;
 
     for (int i = 0; i < 3; i++) {
-        t_pos =
-                pos + i >= seq_.size() ? pos + i -
-                                         seq_.size()
+        t_pos = pos + i >= seq_.size() ? pos + i - seq_.size()
                                        : pos + i;
-        if (seq_[t_pos] ==
-            '1')
+        if (seq_[t_pos] == '1')
             value += 1 << (CODON_SIZE - i - 1);
     }
 

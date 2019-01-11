@@ -44,7 +44,7 @@ constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
  * @param exp_m
  * @param first_gen
  */
-void transfer_in(ExpManager *exp_m, bool first_gen) {
+void transfer_in(ExpManager *exp_m, bool first_gen = false) {
     exp_m->rng_->initDevice();
     checkCuda(cudaMalloc((void **) &gpu_counters,
                          exp_m->rng_->counters().size() *
@@ -55,6 +55,34 @@ void transfer_in(ExpManager *exp_m, bool first_gen) {
                          sizeof(unsigned long long), cudaMemcpyHostToDevice));
 
     // TO COMPLETE
+    checkCuda(cudaMalloc(&cudaMem.input, exp_m->nb_indivs_ * sizeof(double)));
+
+    double *fitnessArray= new double[exp_m->nb_indivs_];
+
+    for (int i = 0; i < exp_m->nb_indivs_; ++i) {
+        fitnessArray[i] = exp_m->prev_internal_organisms_[i]->fitness;
+    }
+    checkCuda(cudaMemcpy(cudaMem.input, fitnessArray,
+                         exp_m->nb_indivs_ * sizeof(double), cudaMemcpyHostToDevice));
+
+    delete[] fitnessArray;
+}
+
+/**
+ * Function to transfer data from GPU to CPU
+ *
+ * @param exp_m
+ */
+void transfer_out(ExpManager *exp_m) {
+    int *next_generation= new int[exp_m->nb_indivs_];
+
+    checkCuda(cudaMemcpy(cudaMem.output, next_generation,
+            exp_m->nb_indivs_ * sizeof(int), cudaMemcpyDeviceToHost));
+
+    cout << "Transfer out. Got " << endl;
+    for (int i = 0; i < exp_m->nb_indivs_; ++i) {
+        cout << i << ": " << next_generation[i] << endl;
+    }
 }
 
 
@@ -196,6 +224,23 @@ __device__ static int mod(int a, int b) {
     return a;
 }
 
+
+__global__ void selection_gpu_kernel(double* fitnessArr, int* indexes, int grid_height, int grid_width) {
+    int i = threadIdx.x + blockDim.x * blockIdx.x;
+    int n = grid_height * grid_width;
+    if (i >= n) return;
+
+    indexes[i] = 42;
+}
+
+void selection_gpu(ExpManager *exp_m) {
+    int n = exp_m->nb_indivs_;
+    float nbThread = 256.0;
+
+    selection_gpu_kernel <<< ceil(n / nbThread), nbThread >>> ((double *) cudaMem.input, (int *) cudaMem.output,
+            exp_m->grid_height_, exp_m->grid_width_);
+}
+
 /**
  * Run a step on the GPU
  */
@@ -203,12 +248,17 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
 
     // Running the simulation process for each organism
     {
+        transfer_in(exp_m);
+        selection_gpu(exp_m);
+        transfer_out(exp_m);
+
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             exp_m->selection(indiv_id);
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
@@ -274,8 +324,6 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         }
         t2 = high_resolution_clock::now();
         auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-
-        //transfer_out(this);
 
 
         std::cout << "LOG," << duration_selection << "," << duration_mutation << "," << duration_start_stop_RNA
