@@ -45,17 +45,18 @@ constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
  * @param first_gen
  */
 void transfer_in(ExpManager *exp_m, bool first_gen = false) {
-    exp_m->rng_->initDevice();
-    checkCuda(cudaMalloc((void **) &gpu_counters,
-                         exp_m->rng_->counters().size() *
-                         sizeof(unsigned long long)));
+//    exp_m->rng_->initDevice();
+//    checkCuda(cudaMalloc((void **) &gpu_counters,
+//                         exp_m->rng_->counters().size() *
+//                         sizeof(unsigned long long)));
+//
+//    checkCuda(cudaMemcpy(gpu_counters, exp_m->rng_->counters().data(),
+//                         exp_m->rng_->counters().size() *
+//                         sizeof(unsigned long long), cudaMemcpyHostToDevice));
 
-    checkCuda(cudaMemcpy(gpu_counters, exp_m->rng_->counters().data(),
-                         exp_m->rng_->counters().size() *
-                         sizeof(unsigned long long), cudaMemcpyHostToDevice));
 
-    // TO COMPLETE
-    checkCuda(cudaMalloc(&cudaMem.input, exp_m->nb_indivs_ * sizeof(double)));
+    checkCuda(cudaMalloc((void **) &cudaMem.input, exp_m->nb_indivs_ * sizeof(double)));
+    checkCuda(cudaMalloc((void **) &cudaMem.output, exp_m->nb_indivs_ * sizeof(int)));
 
     double *fitnessArray= new double[exp_m->nb_indivs_];
 
@@ -76,13 +77,13 @@ void transfer_in(ExpManager *exp_m, bool first_gen = false) {
 void transfer_out(ExpManager *exp_m) {
     int *next_generation= new int[exp_m->nb_indivs_];
 
-    checkCuda(cudaMemcpy(cudaMem.output, next_generation,
+    checkCuda(cudaMemcpy(next_generation, cudaMem.output,
             exp_m->nb_indivs_ * sizeof(int), cudaMemcpyDeviceToHost));
 
     cout << "Transfer out. Got " << endl;
-    for (int i = 0; i < exp_m->nb_indivs_; ++i) {
-        cout << i << ": " << next_generation[i] << endl;
-    }
+//    for (int i = 0; i < exp_m->nb_indivs_; ++i) {
+//        cout << i << ": " << next_generation[i] << endl;
+//    }
 }
 
 
@@ -228,17 +229,24 @@ __device__ static int mod(int a, int b) {
 __global__ void selection_gpu_kernel(double* fitnessArr, int* indexes, int grid_height, int grid_width) {
     int i = threadIdx.x + blockDim.x * blockIdx.x;
     int n = grid_height * grid_width;
+    printf("Debug : %d\n", i);
     if (i >= n) return;
 
-    indexes[i] = 42;
+//    indexes[i] = 42;
 }
 
 void selection_gpu(ExpManager *exp_m) {
     int n = exp_m->nb_indivs_;
     float nbThread = 256.0;
 
-    selection_gpu_kernel <<< ceil(n / nbThread), nbThread >>> ((double *) cudaMem.input, (int *) cudaMem.output,
+    selection_gpu_kernel <<< 1,1 >>> (cudaMem.input, cudaMem.output,
             exp_m->grid_height_, exp_m->grid_width_);
+
+    cudaDeviceSynchronize();
+
+    cudaError_t error = cudaGetLastError();
+
+    cout << "Error:" << error << endl;
 }
 
 /**

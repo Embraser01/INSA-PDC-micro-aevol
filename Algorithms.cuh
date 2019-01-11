@@ -4,8 +4,8 @@
 unsigned long long *gpu_counters;
 
 typedef struct CudaMem {
-    void *input;
-    void *output;
+    double *input;
+    int *output;
 } CudaMem;
 
 CudaMem cudaMem;
