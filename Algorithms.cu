@@ -19,8 +19,9 @@
 using namespace std;
 using namespace std::chrono;
 
-
 #define DEBUG 1
+
+#define STD_BLOCK_SIZE 256
 
 // Convenience function for checking CUDA runtime API results
 // can be wrapped around any runtime API call. No-op in release builds.
@@ -34,6 +35,14 @@ inline cudaError_t checkCuda(cudaError_t result) {
 #endif
     return result;
 }
+
+#define cudaCheck(stmt) do \
+    { \
+        cudaError_t err = stmt; \
+        if (err != cudaSuccess) { \
+            printf("Got CUDA error: %s\n", cudaGetErrorString(err)); \
+        } \
+    } while (0)
 
 
 constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
@@ -67,6 +76,8 @@ void transfer_in(ExpManager *exp_m, bool first_gen = false) {
                          exp_m->nb_indivs_ * sizeof(double), cudaMemcpyHostToDevice));
 
     delete[] fitnessArray;
+
+
 }
 
 /**
@@ -81,9 +92,9 @@ void transfer_out(ExpManager *exp_m) {
             exp_m->nb_indivs_ * sizeof(int), cudaMemcpyDeviceToHost));
 
     cout << "Transfer out. Got " << endl;
-//    for (int i = 0; i < exp_m->nb_indivs_; ++i) {
-//        cout << i << ": " << next_generation[i] << endl;
-//    }
+    for (int i = 0; i < exp_m->nb_indivs_; ++i) {
+        cout << i << ": " << next_generation[i] << endl;
+    }
 }
 
 
@@ -226,27 +237,24 @@ __device__ static int mod(int a, int b) {
 }
 
 
-__global__ void selection_gpu_kernel(double* fitnessArr, int* indexes, int grid_height, int grid_width) {
+__global__ void selection_gpu_kernel(const double* fitnessArr, int* indexes, int grid_height, int grid_width) {
     int i = threadIdx.x + blockDim.x * blockIdx.x;
     int n = grid_height * grid_width;
-    printf("Debug : %d\n", i);
-    if (i >= n) return;
 
-//    indexes[i] = 42;
+    if (i < n) {
+        // TODO: use the real algorithm
+        indexes[i] = i;
+    }
 }
 
 void selection_gpu(ExpManager *exp_m) {
     int n = exp_m->nb_indivs_;
-    float nbThread = 256.0;
 
-    selection_gpu_kernel <<< 1,1 >>> (cudaMem.input, cudaMem.output,
-            exp_m->grid_height_, exp_m->grid_width_);
+    selection_gpu_kernel <<< ceil((float)exp_m->nb_indivs_ / (float)STD_BLOCK_SIZE), STD_BLOCK_SIZE >>>
+        (cudaMem.input, cudaMem.output, exp_m->grid_height_, exp_m->grid_width_);
 
+    cudaCheck(cudaGetLastError());
     cudaDeviceSynchronize();
-
-    cudaError_t error = cudaGetLastError();
-
-    cout << "Error:" << error << endl;
 }
 
 /**

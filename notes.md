@@ -24,4 +24,4 @@ Gain: proportional to the selection scope
 ## Start protein (aka Shine Dal)
 
 See terminator above -> but exact match
-Also smallest blocks (e.g 32)
+Also smaller blocks (e.g 32)

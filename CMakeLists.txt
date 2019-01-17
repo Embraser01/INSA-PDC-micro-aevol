@@ -48,7 +48,7 @@ if (USE_CUDA)
     target_compile_definitions(mini_aevol_gpu PUBLIC USE_CUDA=1)
 
     # CUDA Files
-    set(CMAKE_CUDA_FLAGS "-std=c++11 -arch=compute_60 -lineinfo")
+    set(CMAKE_CUDA_FLAGS "-std=c++11 -arch=compute_50 -lineinfo")
     add_library(cuda_part STATIC Algorithms.cu)
     set_target_properties(cuda_part PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
