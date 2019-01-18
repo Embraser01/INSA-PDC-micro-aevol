@@ -1199,30 +1199,31 @@ void ExpManager::compute_phenotype(int indiv_id) {
  * @param selection_pressure : Selection pressure used during the selection process
  */
 void ExpManager::compute_fitness(int indiv_id, double selection_pressure) {
+    shared_ptr<Organism> &currentOrganism = internal_organisms_[indiv_id];
     for (int fuzzy_idx = 0; fuzzy_idx < 300; fuzzy_idx++) {
 
-        if (internal_organisms_[indiv_id]->phenotype[fuzzy_idx] > 1)
-            internal_organisms_[indiv_id]->phenotype[fuzzy_idx] = 1;
-        if (internal_organisms_[indiv_id]->phenotype[fuzzy_idx] < 0)
-            internal_organisms_[indiv_id]->phenotype[fuzzy_idx] = 0;
+        if (currentOrganism->phenotype[fuzzy_idx] > 1)
+            currentOrganism->phenotype[fuzzy_idx] = 1;
+        if (currentOrganism->phenotype[fuzzy_idx] < 0)
+            currentOrganism->phenotype[fuzzy_idx] = 0;
 
-        internal_organisms_[indiv_id]->delta[fuzzy_idx] =
-                internal_organisms_[indiv_id]->phenotype[fuzzy_idx] -
+        currentOrganism->delta[fuzzy_idx] =
+                currentOrganism->phenotype[fuzzy_idx] -
                 target[fuzzy_idx];
     }
 
-    internal_organisms_[indiv_id]->metaerror = 0;
+    currentOrganism->metaerror = 0;
 
     for (int fuzzy_idx = 0; fuzzy_idx < 299; fuzzy_idx++) {
-        internal_organisms_[indiv_id]->metaerror +=
-                ((std::fabs(internal_organisms_[indiv_id]->delta[fuzzy_idx]) +
-                  std::fabs(internal_organisms_[indiv_id]->delta[fuzzy_idx + 1])) /
+        currentOrganism->metaerror +=
+                ((std::fabs(currentOrganism->delta[fuzzy_idx]) +
+                  std::fabs(currentOrganism->delta[fuzzy_idx + 1])) /
                  (600.0));
     }
 
-    internal_organisms_[indiv_id]->fitness = exp(
+    currentOrganism->fitness = exp(
             -selection_pressure *
-            ((double) internal_organisms_[indiv_id]->metaerror));
+            ((double) currentOrganism->metaerror));
 }
 
 /**

@@ -21,6 +21,7 @@ using namespace std::chrono;
 
 #define DEBUG 1
 
+#define TILE_WIDTH 16
 #define STD_BLOCK_SIZE 256
 
 // Convenience function for checking CUDA runtime API results
@@ -54,15 +55,14 @@ constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
  * @param first_gen
  */
 void transfer_in(ExpManager *exp_m, bool first_gen = false) {
-//    exp_m->rng_->initDevice();
-//    checkCuda(cudaMalloc((void **) &gpu_counters,
-//                         exp_m->rng_->counters().size() *
-//                         sizeof(unsigned long long)));
-//
-//    checkCuda(cudaMemcpy(gpu_counters, exp_m->rng_->counters().data(),
-//                         exp_m->rng_->counters().size() *
-//                         sizeof(unsigned long long), cudaMemcpyHostToDevice));
+    exp_m->rng_->initDevice();
+    checkCuda(cudaMalloc((void **) &gpu_counters,
+                         exp_m->rng_->counters().size() *
+                         sizeof(unsigned long long)));
 
+    checkCuda(cudaMemcpy(gpu_counters, exp_m->rng_->counters().data(),
+                         exp_m->rng_->counters().size() *
+                         sizeof(unsigned long long), cudaMemcpyHostToDevice));
 
     checkCuda(cudaMalloc((void **) &cudaMem.input, exp_m->nb_indivs_ * sizeof(double)));
     checkCuda(cudaMalloc((void **) &cudaMem.output, exp_m->nb_indivs_ * sizeof(int)));
@@ -237,59 +237,57 @@ __device__ static int mod(int a, int b) {
 }
 
 
-__global__ void selection_gpu_kernel(const double* fitnessArr, int* indexes, int grid_height, int grid_width) {
-    int indiv_id = threadIdx.x + blockDim.x * blockIdx.x;
-    int n = grid_height * grid_width;
+__global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproducers, int grid_height, int grid_width,
+        unsigned long long* gpu_counters) {
+    uint i_t = threadIdx.y;
+    uint j_t = threadIdx.x;
+    uint i = (blockIdx.y * (TILE_WIDTH - 2) + i_t - 1) % grid_width;
+    uint j = (blockIdx.x * (TILE_WIDTH - 2) + j_t - 1) % grid_height;
 
-    int selection_scope_x = 3;
-    int selection_scope_y = 3;
-    int neighborhood_size = 9;
+    // Preload the data
+    __shared__ double preload[TILE_WIDTH][TILE_WIDTH];
+    const uint indiv_id = i * grid_width + j;
+    preload[i_t][j_t] = fitnessArr[indiv_id];
+    __syncthreads();
 
-    double *local_fit_array = new double[neighborhood_size];
-    double *probs = new double[neighborhood_size];
-    int count = 0;
-    double sum_local_fit = 0.0;
+    if (i_t <= 0 || j_t <= 0 || i_t >= TILE_WIDTH - 1 || j_t >= TILE_WIDTH - 1) return;
 
-    int32_t x = indiv_id / grid_height;
-    int32_t y = indiv_id % grid_height;
-
-    int cur_x, cur_y;
-
-    for (int8_t i = -1; i < selection_scope_x - 1; i++) {
-        for (int8_t j = -1; j < selection_scope_y - 1; j++) {
-            cur_x = (x + i + grid_width) % grid_width;
-            cur_y = (y + j + grid_height) % grid_height;
-
-            local_fit_array[count] = fitnessArr[cur_x * grid_height_ + cur_y];
-            sum_local_fit += local_fit_array[count];
-
-            count++;
+    // Calculate value
+    double sumLocalFit = 0.0;
+    for (int8_t o_i = -1; o_i <= 1; o_i++) {
+        for (int8_t o_j = -1; o_j <= 1; o_j++) {
+            sumLocalFit += preload[i_t + o_i][j_t + o_j];
         }
     }
 
-    for (int16_t i = 0; i < neighborhood_size; i++) {
-        probs[i] = local_fit_array[i] / sum_local_fit;
+    double probs[9];
+
+    for (int8_t o_i = -1; o_i <= 1; o_i++) {
+        for (int8_t o_j = -1; o_j <= 1; o_j++) {
+            probs[3 * (o_i + 1) + o_j + 1] = preload[i_t + o_i][j_t + o_j] / sumLocalFit;
+        }
     }
 
-    auto rng = std::move(rng_->gen(indiv_id, Threefry::REPROD));
-    int found_org = rng.roulette_random(probs, neighborhood_size);
+    Threefry::Device rng(gpu_counters, indiv_id, Threefry::Phase::REPROD, grid_width * grid_height);
+    int found_org = rng.roulette_random(probs, 9);
 
-    int x_offset = (found_org / selection_scope_x) - 1;
-    int y_offset = (found_org % selection_scope_y) - 1;
+    int j_offset = (found_org / 3) - 1;
+    int i_offset = (found_org % 3) - 1;
 
-    delete[] local_fit_array;
-    delete[] probs;
-
-
-    next_generation_reproducer_[indiv_id] = ((x + x_offset + grid_width_) % grid_width_) * grid_height_ +
-                                            ((y + y_offset + grid_height_) % grid_height_);
+    printf("%d\n", indiv_id);
+    nextReproducers[indiv_id] = ((j + j_offset + grid_width) % grid_width) * grid_height +
+                                ((i + i_offset + grid_height) % grid_height);
 }
 
 void selection_gpu(ExpManager *exp_m) {
     int n = exp_m->nb_indivs_;
 
-    selection_gpu_kernel <<< ceil((float)exp_m->nb_indivs_ / (float)STD_BLOCK_SIZE), STD_BLOCK_SIZE >>>
-        (cudaMem.input, cudaMem.output, exp_m->grid_height_, exp_m->grid_width_);
+    dim3 grid(ceil(exp_m->grid_width_  / (float)(TILE_WIDTH - 2)),
+              ceil(exp_m->grid_height_ / (float)(TILE_WIDTH - 2)), 1);
+    dim3 block(TILE_WIDTH, TILE_WIDTH, 1);
+
+    selection_gpu_kernel <<< grid, block >>>
+        (cudaMem.input, cudaMem.output, exp_m->grid_height_, exp_m->grid_width_, gpu_counters);
 
     cudaCheck(cudaGetLastError());
     cudaDeviceSynchronize();
