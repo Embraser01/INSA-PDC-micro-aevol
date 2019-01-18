@@ -238,13 +238,51 @@ __device__ static int mod(int a, int b) {
 
 
 __global__ void selection_gpu_kernel(const double* fitnessArr, int* indexes, int grid_height, int grid_width) {
-    int i = threadIdx.x + blockDim.x * blockIdx.x;
+    int indiv_id = threadIdx.x + blockDim.x * blockIdx.x;
     int n = grid_height * grid_width;
 
-    if (i < n) {
-        // TODO: use the real algorithm
-        indexes[i] = i;
+    int selection_scope_x = 3;
+    int selection_scope_y = 3;
+    int neighborhood_size = 9;
+
+    double *local_fit_array = new double[neighborhood_size];
+    double *probs = new double[neighborhood_size];
+    int count = 0;
+    double sum_local_fit = 0.0;
+
+    int32_t x = indiv_id / grid_height;
+    int32_t y = indiv_id % grid_height;
+
+    int cur_x, cur_y;
+
+    for (int8_t i = -1; i < selection_scope_x - 1; i++) {
+        for (int8_t j = -1; j < selection_scope_y - 1; j++) {
+            cur_x = (x + i + grid_width) % grid_width;
+            cur_y = (y + j + grid_height) % grid_height;
+
+            local_fit_array[count] = fitnessArr[cur_x * grid_height_ + cur_y];
+            sum_local_fit += local_fit_array[count];
+
+            count++;
+        }
     }
+
+    for (int16_t i = 0; i < neighborhood_size; i++) {
+        probs[i] = local_fit_array[i] / sum_local_fit;
+    }
+
+    auto rng = std::move(rng_->gen(indiv_id, Threefry::REPROD));
+    int found_org = rng.roulette_random(probs, neighborhood_size);
+
+    int x_offset = (found_org / selection_scope_x) - 1;
+    int y_offset = (found_org % selection_scope_y) - 1;
+
+    delete[] local_fit_array;
+    delete[] probs;
+
+
+    next_generation_reproducer_[indiv_id] = ((x + x_offset + grid_width_) % grid_width_) * grid_height_ +
+                                            ((y + y_offset + grid_height_) % grid_height_);
 }
 
 void selection_gpu(ExpManager *exp_m) {
