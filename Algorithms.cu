@@ -76,8 +76,6 @@ void transfer_in(ExpManager *exp_m, bool first_gen = false) {
                          exp_m->nb_indivs_ * sizeof(double), cudaMemcpyHostToDevice));
 
     delete[] fitnessArray;
-
-
 }
 
 /**
@@ -90,6 +88,12 @@ void transfer_out(ExpManager *exp_m) {
 
     checkCuda(cudaMemcpy(next_generation, cudaMem.output,
             exp_m->nb_indivs_ * sizeof(int), cudaMemcpyDeviceToHost));
+
+    cudaFree(cudaMem.input);
+    cudaFree(cudaMem.output);
+
+    // TODO: copy back rnd gen states?
+    cudaFree(gpu_counters);
 
     cout << "Transfer out. Got " << endl;
     for (int i = 0; i < exp_m->nb_indivs_; ++i) {
@@ -239,18 +243,21 @@ __device__ static int mod(int a, int b) {
 
 __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproducers, int grid_height, int grid_width,
         unsigned long long* gpu_counters) {
-    uint i_t = threadIdx.y;
-    uint j_t = threadIdx.x;
-    uint i = (blockIdx.y * (TILE_WIDTH - 2) + i_t - 1) % grid_width;
-    uint j = (blockIdx.x * (TILE_WIDTH - 2) + j_t - 1) % grid_height;
+    uint8_t i_t = threadIdx.y;
+    uint8_t j_t = threadIdx.x;
+    int i_abs = blockIdx.y * (TILE_WIDTH - 2) + i_t - 1;
+    int j_abs = blockIdx.x * (TILE_WIDTH - 2) + j_t - 1;
+    uint i = (uint)(i_abs + grid_height) % grid_height;
+    uint j = (uint)(j_abs + grid_width) % grid_width;
+    const uint indiv_id = i * grid_width + j;
 
     // Preload the data
     __shared__ double preload[TILE_WIDTH][TILE_WIDTH];
-    const uint indiv_id = i * grid_width + j;
     preload[i_t][j_t] = fitnessArr[indiv_id];
     __syncthreads();
 
-    if (i_t <= 0 || j_t <= 0 || i_t >= TILE_WIDTH - 1 || j_t >= TILE_WIDTH - 1) return;
+    if (i_t <= 0 || j_t <= 0 || i_t >= TILE_WIDTH - 1 || j_t >= TILE_WIDTH - 1
+        || i_abs >= grid_height || j_abs >= grid_width) return;
 
     // Calculate value
     double sumLocalFit = 0.0;
@@ -260,7 +267,7 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
         }
     }
 
-    double probs[9];
+    double * probs = new double[9];
 
     for (int8_t o_i = -1; o_i <= 1; o_i++) {
         for (int8_t o_j = -1; o_j <= 1; o_j++) {
@@ -269,22 +276,27 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
     }
 
     Threefry::Device rng(gpu_counters, indiv_id, Threefry::Phase::REPROD, grid_width * grid_height);
-    int found_org = rng.roulette_random(probs, 9);
+    //int found_org = rng.roulette_random(probs, 9);
 
-    int j_offset = (found_org / 3) - 1;
-    int i_offset = (found_org % 3) - 1;
-
-    printf("%d\n", indiv_id);
-    nextReproducers[indiv_id] = ((j + j_offset + grid_width) % grid_width) * grid_height +
-                                ((i + i_offset + grid_height) % grid_height);
+    delete[] probs;
+//
+//    int j_offset = (found_org / 3) - 1;
+//    int i_offset = (found_org % 3) - 1;
+//
+//    // printf("%d %d %d (/%d)\n", i, j, indiv_id, grid_width * grid_height);
+//    nextReproducers[indiv_id] = ((i + i_offset + grid_height) % grid_height) * grid_width +
+//                                ((j + j_offset + grid_width) % grid_width);
+    // printf("%d\n", indiv_id);
 }
 
 void selection_gpu(ExpManager *exp_m) {
     int n = exp_m->nb_indivs_;
 
-    dim3 grid(ceil(exp_m->grid_width_  / (float)(TILE_WIDTH - 2)),
-              ceil(exp_m->grid_height_ / (float)(TILE_WIDTH - 2)), 1);
+//    dim3 grid(ceil(exp_m->grid_width_  / (float)(TILE_WIDTH - 2)),
+//              ceil(exp_m->grid_height_ / (float)(TILE_WIDTH - 2)), 1);
+    dim3 grid(1, 1, 1);
     dim3 block(TILE_WIDTH, TILE_WIDTH, 1);
+
 
     selection_gpu_kernel <<< grid, block >>>
         (cudaMem.input, cudaMem.output, exp_m->grid_height_, exp_m->grid_width_, gpu_counters);

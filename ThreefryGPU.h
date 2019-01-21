@@ -20,6 +20,8 @@ class Threefry::Device {
         m_ctr[0] = indiv_id + nb_indiv*phase;
         if(threadIdx.x == 0)
             Random123_Threefry_Device_d_Random = (unsigned long long*)d;
+        //printf("%ld\n", m_ctr.v[1]);
+        //m_ctr.v[1] = (uint64_t)1;
         m_ctr.v[1] = ((unsigned long long*)d)[m_ctr[0]];
     }
 
