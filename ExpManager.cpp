@@ -1327,13 +1327,6 @@ void ExpManager::run_evolution(int nb_gen) {
 #ifdef USE_CUDA
 
 void ExpManager::run_evolution_on_gpu(int nb_gen) {
-    high_resolution_clock::time_point t1 = high_resolution_clock::now();
-    cout << "Transfer" << endl;
-    transfer_in(this, true);
-    high_resolution_clock::time_point t2 = high_resolution_clock::now();
-    auto duration_transfer_in = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    cout << "Transfer done in " << duration_transfer_in << endl;
-
     for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
         auto rng = std::move(rng_->gen(indiv_id, Threefry::MUTATION));
 
@@ -1365,7 +1358,7 @@ void ExpManager::run_evolution_on_gpu(int nb_gen) {
         run_a_step_on_GPU(this, w_max_, selection_pressure_,
                           firstGen);
 
-        t2 = high_resolution_clock::now();
+        high_resolution_clock::time_point t2 = high_resolution_clock::now();
         auto duration_step = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         std::cout << "LOG," << duration_step << std::endl;

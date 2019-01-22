@@ -21,7 +21,7 @@ using namespace std::chrono;
 
 #define DEBUG 1
 
-#define TILE_WIDTH 16
+#define TILE_WIDTH 64
 #define STD_BLOCK_SIZE 256
 
 // Convenience function for checking CUDA runtime API results
@@ -48,22 +48,19 @@ inline cudaError_t checkCuda(cudaError_t result) {
 
 constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
 
-/**
- * Function to transfer data from CPU to GPU
- *
- * @param exp_m
- * @param first_gen
- */
-void transfer_in(ExpManager *exp_m, bool first_gen = false) {
+void counters_in(ExpManager *exp_m) {
     exp_m->rng_->initDevice();
+
     checkCuda(cudaMalloc((void **) &gpu_counters,
                          exp_m->rng_->counters().size() *
                          sizeof(unsigned long long)));
-
     checkCuda(cudaMemcpy(gpu_counters, exp_m->rng_->counters().data(),
                          exp_m->rng_->counters().size() *
                          sizeof(unsigned long long), cudaMemcpyHostToDevice));
+}
 
+
+void selection_in(ExpManager *exp_m, bool first_gen = false) {
     checkCuda(cudaMalloc((void **) &cudaMem.input, exp_m->nb_indivs_ * sizeof(double)));
     checkCuda(cudaMalloc((void **) &cudaMem.output, exp_m->nb_indivs_ * sizeof(int)));
 
@@ -78,27 +75,16 @@ void transfer_in(ExpManager *exp_m, bool first_gen = false) {
     delete[] fitnessArray;
 }
 
-/**
- * Function to transfer data from GPU to CPU
- *
- * @param exp_m
- */
-void transfer_out(ExpManager *exp_m) {
-    int *next_generation= new int[exp_m->nb_indivs_];
-
-    checkCuda(cudaMemcpy(next_generation, cudaMem.output,
+void selection_out(ExpManager *exp_m) {
+    checkCuda(cudaMemcpy(exp_m->next_generation_reproducer_, cudaMem.output,
             exp_m->nb_indivs_ * sizeof(int), cudaMemcpyDeviceToHost));
 
     cudaFree(cudaMem.input);
     cudaFree(cudaMem.output);
+}
 
-    // TODO: copy back rnd gen states?
+void clean_cuda_mem() {
     cudaFree(gpu_counters);
-
-    cout << "Transfer out. Got " << endl;
-    for (int i = 0; i < exp_m->nb_indivs_; ++i) {
-        cout << i << ": " << next_generation[i] << endl;
-    }
 }
 
 
@@ -243,12 +229,12 @@ __device__ static int mod(int a, int b) {
 
 __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproducers, int grid_height, int grid_width,
         unsigned long long* gpu_counters) {
-    uint8_t i_t = threadIdx.y;
-    uint8_t j_t = threadIdx.x;
-    int i_abs = blockIdx.y * (TILE_WIDTH - 2) + i_t - 1;
-    int j_abs = blockIdx.x * (TILE_WIDTH - 2) + j_t - 1;
-    uint i = (uint)(i_abs + grid_height) % grid_height;
-    uint j = (uint)(j_abs + grid_width) % grid_width;
+    const uint8_t i_t = threadIdx.y;
+    const uint8_t j_t = threadIdx.x;
+    const int i_abs = blockIdx.y * (TILE_WIDTH - 2) + i_t - 1;
+    const int j_abs = blockIdx.x * (TILE_WIDTH - 2) + j_t - 1;
+    const uint i = (uint)(i_abs + grid_height) % grid_height;
+    const uint j = (uint)(j_abs + grid_width) % grid_width;
     const uint indiv_id = i * grid_width + j;
 
     // Preload the data
@@ -276,25 +262,22 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
     }
 
     Threefry::Device rng(gpu_counters, indiv_id, Threefry::Phase::REPROD, grid_width * grid_height);
-    //int found_org = rng.roulette_random(probs, 9);
+    int found_org = rng.roulette_random(probs, 9);
 
     delete[] probs;
-//
-//    int j_offset = (found_org / 3) - 1;
-//    int i_offset = (found_org % 3) - 1;
-//
-//    // printf("%d %d %d (/%d)\n", i, j, indiv_id, grid_width * grid_height);
-//    nextReproducers[indiv_id] = ((i + i_offset + grid_height) % grid_height) * grid_width +
-//                                ((j + j_offset + grid_width) % grid_width);
-    // printf("%d\n", indiv_id);
+
+    int i_offset = (found_org / 3) - 1;
+    int j_offset = (found_org % 3) - 1;
+
+    nextReproducers[indiv_id] = ((i + i_offset + grid_height) % grid_height) * grid_width +
+                                ((j + j_offset + grid_width) % grid_width);
 }
 
 void selection_gpu(ExpManager *exp_m) {
     int n = exp_m->nb_indivs_;
 
-//    dim3 grid(ceil(exp_m->grid_width_  / (float)(TILE_WIDTH - 2)),
-//              ceil(exp_m->grid_height_ / (float)(TILE_WIDTH - 2)), 1);
-    dim3 grid(1, 1, 1);
+    dim3 grid(ceil(exp_m->grid_width_  / (float)(TILE_WIDTH - 2)),
+              ceil(exp_m->grid_height_ / (float)(TILE_WIDTH - 2)), 1);
     dim3 block(TILE_WIDTH, TILE_WIDTH, 1);
 
 
@@ -312,16 +295,19 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
 
     // Running the simulation process for each organism
     {
-        transfer_in(exp_m);
-        selection_gpu(exp_m);
-        transfer_out(exp_m);
+        if(first_gen) {
+            counters_in(exp_m);
+        }
 
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
-            exp_m->selection(indiv_id);
-        }
+        selection_in(exp_m, first_gen);
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
-        auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        selection_gpu(exp_m);
+        high_resolution_clock::time_point t3 = high_resolution_clock::now();
+        selection_out(exp_m);
+        high_resolution_clock::time_point t4 = high_resolution_clock::now();
+        auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t1).count();
+        auto duration_selection_calc = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
 
 
         t1 = high_resolution_clock::now();
@@ -390,11 +376,14 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
-        std::cout << "LOG," << duration_selection << "," << duration_mutation << "," << duration_start_stop_RNA
-                  << "," << duration_start_protein << "," << duration_compute_protein << ","
-                  << duration_translate_protein
-                  << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
-                  << duration_compute_fitness << std::endl;
+//        std::cout << "LOG," << duration_selection  << " (" << duration_selection_calc << "),"
+//                  << duration_mutation << "," << duration_start_stop_RNA
+//                  << "," << duration_start_protein << "," << duration_compute_protein << ","
+//                  << duration_translate_protein
+//                  << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
+//                  << duration_compute_fitness << std::endl;
+
+        std::cout << "SELECTION," << duration_selection_calc << endl;
     }
     for (int indiv_id = 1; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         exp_m->prev_internal_organisms_[indiv_id] = exp_m->internal_organisms_[indiv_id];
