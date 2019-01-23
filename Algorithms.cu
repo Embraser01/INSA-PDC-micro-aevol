@@ -21,7 +21,7 @@ using namespace std::chrono;
 
 #define DEBUG 1
 
-#define TILE_WIDTH 64
+#define TILE_WIDTH 16
 #define STD_BLOCK_SIZE 256
 
 // Convenience function for checking CUDA runtime API results
@@ -247,18 +247,16 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
 
     // Calculate value
     double sumLocalFit = 0.0;
+    double * probs = new double[9];
     for (int8_t o_i = -1; o_i <= 1; o_i++) {
         for (int8_t o_j = -1; o_j <= 1; o_j++) {
-            sumLocalFit += preload[i_t + o_i][j_t + o_j];
+            probs[3 * (o_i + 1) + o_j + 1] = preload[i_t + o_i][j_t + o_j];
+            sumLocalFit += probs[3 * (o_i + 1) + o_j + 1];
         }
     }
 
-    double * probs = new double[9];
-
-    for (int8_t o_i = -1; o_i <= 1; o_i++) {
-        for (int8_t o_j = -1; o_j <= 1; o_j++) {
-            probs[3 * (o_i + 1) + o_j + 1] = preload[i_t + o_i][j_t + o_j] / sumLocalFit;
-        }
+    for (uint8_t i = 0; i < 9; i++) {
+        probs[i] /= sumLocalFit;
     }
 
     Threefry::Device rng(gpu_counters, indiv_id, Threefry::Phase::REPROD, grid_width * grid_height);
@@ -279,7 +277,6 @@ void selection_gpu(ExpManager *exp_m) {
     dim3 grid(ceil(exp_m->grid_width_  / (float)(TILE_WIDTH - 2)),
               ceil(exp_m->grid_height_ / (float)(TILE_WIDTH - 2)), 1);
     dim3 block(TILE_WIDTH, TILE_WIDTH, 1);
-
 
     selection_gpu_kernel <<< grid, block >>>
         (cudaMem.input, cudaMem.output, exp_m->grid_height_, exp_m->grid_width_, gpu_counters);
@@ -376,14 +373,13 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
-//        std::cout << "LOG," << duration_selection  << " (" << duration_selection_calc << "),"
-//                  << duration_mutation << "," << duration_start_stop_RNA
-//                  << "," << duration_start_protein << "," << duration_compute_protein << ","
-//                  << duration_translate_protein
-//                  << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
-//                  << duration_compute_fitness << std::endl;
+        std::cout << "LOG," << duration_selection  << " (" << duration_selection_calc << "),"
+                  << duration_mutation << "," << duration_start_stop_RNA
+                  << "," << duration_start_protein << "," << duration_compute_protein << ","
+                  << duration_translate_protein
+                  << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
+                  << duration_compute_fitness << std::endl;
 
-        std::cout << "SELECTION," << duration_selection_calc << endl;
     }
     for (int indiv_id = 1; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         exp_m->prev_internal_organisms_[indiv_id] = exp_m->internal_organisms_[indiv_id];
