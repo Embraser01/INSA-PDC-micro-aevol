@@ -24,6 +24,7 @@ using namespace std::chrono;
 
 #define TILE_WIDTH 16
 #define STD_BLOCK_SIZE 256
+constexpr int DNA_INNER_BLOCK = STD_BLOCK_SIZE - PROM_SIZE + 1;
 
 // Convenience function for checking CUDA runtime API results
 // can be wrapped around any runtime API call. No-op in release builds.
@@ -99,6 +100,7 @@ void prom_term_out(ExpManager *exp_m) {
                          exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
 
     for(uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
+        if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
         checkCuda(cudaMemcpy(&hostMem.promoters[indiv_id * exp_m->genome_size],
                              &cudaMem.promoters[indiv_id * exp_m->genome_size],
                              hostMem.pos_prom_counter[indiv_id] * sizeof(uint16_t), cudaMemcpyDeviceToHost));
@@ -118,6 +120,8 @@ void prom_term_out(ExpManager *exp_m) {
 //                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
 
     for(uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
+        if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
+
         // Found promoters
         map<uint16_t, uint8_t> temp_prom;
         for(uint i = 0; i < hostMem.pos_prom_counter[indiv_id]; i++) {
@@ -278,13 +282,34 @@ void selection_gpu(ExpManager *exp_m) {
     cudaDeviceSynchronize();
 }
 
-__global__ void search_promoters_gpu_kernel() {
+__global__ void search_promoters_gpu_kernel(
+        char *DNA, uint16_t *promoters, uint8_t *promoter_errors, uint16_t *pos_prom_counter,
+        uint16_t genome_size, int indiv_id) {
+    const uint8_t i_t = threadIdx.x;
+    const uint16_t i = blockIdx.x * DNA_INNER_BLOCK + i_t;
+
+    __shared__ char preload[STD_BLOCK_SIZE];
+    preload[i_t] = DNA[(i < genome_size) ? (indiv_id * genome_size + i) : ((indiv_id - 1) * genome_size + i)];
+    __syncthreads();
+
+    if(i_t >= DNA_INNER_BLOCK) return;
+
+    uint8_t error = 0;
+    for(uint k = 0; k < PROM_SIZE; k++) {
+        error += (PROM_SEQ[k] == preload[i_t + k]) ? 0 : 1;
+    }
+
+    if(error > 4) return;
+
+    // printf("hey! Indiv %d, pos %d\n", indiv_id, i);
 }
 
-void search_promoters_gpu(ExpManager *exp_m) {
-    uint grid = (exp_m->genome_size - PROM_SIZE + 1) / (STD_BLOCK_SIZE - PROM_SIZE + 1);
-    uint block = STD_BLOCK_SIZE;
-    search_promoters_gpu_kernel <<< grid, block >>>();
+void search_promoters_gpu(ExpManager *exp_m, int indiv_id) {
+    int grid = exp_m->genome_size / DNA_INNER_BLOCK;
+    int block = STD_BLOCK_SIZE;
+    search_promoters_gpu_kernel <<< grid, block >>>
+        (cudaMem.DNA, cudaMem.promoters, cudaMem.promoter_errors, cudaMem.pos_prom_counter,
+                exp_m->genome_size, indiv_id);
 }
 
 __global__ void search_terminators_gpu_kernel() {
@@ -321,12 +346,16 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         auto duration_mutation = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
-        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
-            if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
-                exp_m->start_stop_RNA(indiv_id);
-                exp_m->compute_RNA(indiv_id);
-            }
+        for (uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
+            if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
+            prom_term_in(exp_m, indiv_id);
+            search_promoters_gpu(exp_m, indiv_id);
         }
+        //prom_term_out(exp_m);
+//        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
+//            if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
+//            exp_m->compute_RNA(indiv_id);
+//        }
         t2 = high_resolution_clock::now();
         auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
