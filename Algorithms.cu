@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <chrono>
 #include <iostream>
+#include <map>
 // #include <cstdint>
 // #include <stdio.h>
 // #include <unistd.h>
@@ -37,54 +38,121 @@ inline cudaError_t checkCuda(cudaError_t result) {
     return result;
 }
 
-#define cudaCheck(stmt) do \
-    { \
-        cudaError_t err = stmt; \
-        if (err != cudaSuccess) { \
-            printf("Got CUDA error: %s\n", cudaGetErrorString(err)); \
-        } \
-    } while (0)
-
 
 constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
 
-void counters_in(ExpManager *exp_m) {
+void init_cuda_mem(ExpManager *exp_m) {
+    // Random numbers generator
     exp_m->rng_->initDevice();
-
     checkCuda(cudaMalloc((void **) &gpu_counters,
                          exp_m->rng_->counters().size() *
                          sizeof(unsigned long long)));
     checkCuda(cudaMemcpy(gpu_counters, exp_m->rng_->counters().data(),
                          exp_m->rng_->counters().size() *
                          sizeof(unsigned long long), cudaMemcpyHostToDevice));
+
+    // Selection
+    hostMem.fitnessArray= new double[exp_m->nb_indivs_];
+    checkCuda(cudaMalloc((void **) &cudaMem.fitness, exp_m->nb_indivs_ * sizeof(double)));
+    checkCuda(cudaMalloc((void **) &cudaMem.nextReproducer, exp_m->nb_indivs_ * sizeof(int)));
+
+    // DNA
+    checkCuda(cudaMalloc((void **) &cudaMem.DNA, exp_m->nb_indivs_ * exp_m->genome_size * sizeof(char)));
+
+    // Promoters and terminators
+    checkCuda(cudaMalloc((void **) &cudaMem.promoters, exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t)));
+    checkCuda(cudaMalloc((void **) &cudaMem.promoter_errors, exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint8_t)));
+    checkCuda(cudaMalloc((void **) &cudaMem.terminators, exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t)));
+    checkCuda(cudaMalloc((void **) &cudaMem.pos_prom_counter, exp_m->genome_size * sizeof(uint16_t)));
+    checkCuda(cudaMalloc((void **) &cudaMem.pos_term_counter, exp_m->genome_size * sizeof(uint16_t)));
 }
 
 
-void selection_in(ExpManager *exp_m, bool first_gen = false) {
-    checkCuda(cudaMalloc((void **) &cudaMem.input, exp_m->nb_indivs_ * sizeof(double)));
-    checkCuda(cudaMalloc((void **) &cudaMem.output, exp_m->nb_indivs_ * sizeof(int)));
-
-    double *fitnessArray= new double[exp_m->nb_indivs_];
-
+void selection_in(ExpManager *exp_m) {
     for (int i = 0; i < exp_m->nb_indivs_; ++i) {
-        fitnessArray[i] = exp_m->prev_internal_organisms_[i]->fitness;
+        hostMem.fitnessArray[i] = exp_m->prev_internal_organisms_[i]->fitness;
     }
-    checkCuda(cudaMemcpy(cudaMem.input, fitnessArray,
+    checkCuda(cudaMemcpy(cudaMem.fitness, hostMem.fitnessArray,
                          exp_m->nb_indivs_ * sizeof(double), cudaMemcpyHostToDevice));
-
-    delete[] fitnessArray;
 }
 
 void selection_out(ExpManager *exp_m) {
-    checkCuda(cudaMemcpy(exp_m->next_generation_reproducer_, cudaMem.output,
-            exp_m->nb_indivs_ * sizeof(int), cudaMemcpyDeviceToHost));
+    checkCuda(cudaMemcpy(exp_m->next_generation_reproducer_, cudaMem.nextReproducer,
+              exp_m->nb_indivs_ * sizeof(int), cudaMemcpyDeviceToHost));
+}
 
-    cudaFree(cudaMem.input);
-    cudaFree(cudaMem.output);
+void prom_term_in(ExpManager *exp_m, uint indiv_id) {
+    if(indiv_id == 0) {
+        cudaMemset(cudaMem.pos_prom_counter, 0, exp_m->genome_size * sizeof(uint16_t));
+        cudaMemset(cudaMem.pos_term_counter, 0, exp_m->genome_size * sizeof(uint16_t));
+    }
+
+    checkCuda(cudaMemcpy(&cudaMem.DNA[indiv_id * exp_m->genome_size],
+                         exp_m->internal_organisms_[indiv_id]->dna_->seq_.data(),
+                         exp_m->genome_size * sizeof(char), cudaMemcpyHostToDevice));
+}
+
+void prom_term_out(ExpManager *exp_m) {
+    checkCuda(cudaMemcpy(hostMem.pos_prom_counter, cudaMem.pos_prom_counter,
+                         exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+    checkCuda(cudaMemcpy(hostMem.pos_term_counter, cudaMem.pos_term_counter,
+                         exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+
+    for(uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
+        checkCuda(cudaMemcpy(&hostMem.promoters[indiv_id * exp_m->genome_size],
+                             &cudaMem.promoters[indiv_id * exp_m->genome_size],
+                             hostMem.pos_prom_counter[indiv_id] * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&hostMem.promoter_errors[indiv_id * exp_m->genome_size],
+                             &cudaMem.promoter_errors[indiv_id * exp_m->genome_size],
+                             hostMem.pos_prom_counter[indiv_id] * sizeof(uint8_t), cudaMemcpyDeviceToHost));
+        checkCuda(cudaMemcpy(&hostMem.terminators[indiv_id * exp_m->genome_size],
+                             &cudaMem.terminators[indiv_id * exp_m->genome_size],
+                             hostMem.pos_term_counter[indiv_id] * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+    }
+    // Alternative:
+//    checkCuda(cudaMemcpy(hostMem.promoters, cudaMem.promoters,
+//                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+//    checkCuda(cudaMemcpy(hostMem.promoter_errors, cudaMem.promoter_errors,
+//                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint8_t), cudaMemcpyDeviceToHost));
+//    checkCuda(cudaMemcpy(hostMem.terminators, cudaMem.terminators,
+//                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+
+    for(uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
+        // Found promoters
+        map<uint16_t, uint8_t> temp_prom;
+        for(uint i = 0; i < hostMem.pos_prom_counter[indiv_id]; i++) {
+            temp_prom.insert(pair<int, int>(hostMem.promoters[indiv_id * exp_m->genome_size + i],
+                                            hostMem.promoter_errors[indiv_id * exp_m->genome_size + i]));
+        }
+        shared_ptr<Organism> &currentOrganism = exp_m->internal_organisms_[indiv_id];
+        uint prom_counter = 0;
+        for(const pair<uint16_t, uint8_t>& prom: temp_prom) {
+            Promoter *nprom = new Promoter((int)prom.first, (int)prom.second);
+            currentOrganism->promoters[prom_counter] = nprom;
+            currentOrganism->count_prom++;
+            prom_counter++;
+        }
+
+        // Found terminators
+        for(uint i = 0; i < hostMem.pos_term_counter[indiv_id]; i++) {
+            currentOrganism->terminators.insert((int)hostMem.terminators[indiv_id * exp_m->genome_size + i]);
+        }
+    }
 }
 
 void clean_cuda_mem() {
+    // Device
     cudaFree(gpu_counters);
+    cudaFree(cudaMem.fitness);
+    cudaFree(cudaMem.nextReproducer);
+    cudaFree(cudaMem.DNA);
+    cudaFree(cudaMem.promoters);
+    cudaFree(cudaMem.terminators);
+    cudaFree(cudaMem.pos_prom_counter);
+    cudaFree(cudaMem.pos_term_counter);
+
+    // Host
+    delete[] hostMem.fitnessArray;
 }
 
 
@@ -137,87 +205,7 @@ __device__ static double gammln(double X) {
     return -tmp + log(2.5066282746310005 * ser / x);
 }
 
-
-__device__ int32_t Threefry::Device::binomial_random(int32_t nb_drawings, double prob) {
-    int32_t nb_success;
-
-    // The binomial distribution is invariant under changing
-    // ProbSuccess to 1-ProbSuccess, if we also change the answer to
-    // NbTrials minus itself; we ll remember to do this below.
-    double p;
-    if (prob <= 0.5) p = prob;
-    else p = 1.0 - prob;
-
-    // mean of the deviate to be produced
-    double mean = nb_drawings * p;
-
-
-    if (nb_drawings < 25)
-        // Use the direct method while NbTrials is not too large.
-        // This can require up to 25 calls to the uniform random.
-    {
-        nb_success = 0;
-        for (int32_t j = 1 ; j <= nb_drawings ; j++)
-        {
-            if (randomDouble() < p) nb_success++;
-        }
-    }
-    else if (mean < 1.0)
-        // If fewer than one event is expected out of 25 or more trials,
-        // then the distribution is quite accurately Poisson. Use direct Poisson method.
-    {
-        double g = exp(-mean);
-        double t = 1.0;
-        int32_t j;
-        for (j = 0; j <= nb_drawings ; j++)
-        {
-            t = t * randomDouble();
-            if (t < g) break;
-        }
-
-        if (j <= nb_drawings) nb_success = j;
-        else nb_success = nb_drawings;
-    }
-
-    else
-        // Use the rejection method.
-    {
-        double en     = nb_drawings;
-        double oldg   = gammln(en + 1.0);
-        double pc     = 1.0 - p;
-        double plog   = log(p);
-        double pclog  = log(pc);
-
-        // rejection method with a Lorentzian comparison function.
-        double sq = sqrt(2.0 * mean * pc);
-        double angle, y, em, t;
-        do
-        {
-            do
-            {
-                angle = M_PI * randomDouble();
-                y = tan(angle);
-                em = sq*y + mean;
-            } while (em < 0.0 || em >= (en + 1.0)); // Reject.
-
-            em = floor(em); // Trick for integer-valued distribution.
-            t = 1.2 * sq * (1.0 + y*y)
-                * exp(oldg - gammln(em + 1.0) - gammln(en - em + 1.0) + em * plog + (en - em) * pclog);
-
-        } while (randomDouble() > t); // Reject. This happens about 1.5 times per deviate, on average.
-
-        nb_success = (int32_t) rint(em);
-    }
-
-
-    // Undo the symmetry transformation.
-    if (p != prob) nb_success = nb_drawings - nb_success;
-
-    return nb_success;
-}
-
 __device__ static int mod(int a, int b) {
-
     assert(b > 0);
 
     while (a < 0) a += b;
@@ -225,16 +213,21 @@ __device__ static int mod(int a, int b) {
 
     return a;
 }
+__device__ static uint mod(uint a, uint b) {
+    while (a >= b) a -= b;
+
+    return a;
+}
 
 
-__global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproducers, int grid_height, int grid_width,
+__global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproducers, uint grid_height, uint grid_width,
         unsigned long long* gpu_counters) {
     const uint8_t i_t = threadIdx.y;
     const uint8_t j_t = threadIdx.x;
     const int i_abs = blockIdx.y * (TILE_WIDTH - 2) + i_t - 1;
     const int j_abs = blockIdx.x * (TILE_WIDTH - 2) + j_t - 1;
-    const uint i = (uint)(i_abs + grid_height) % grid_height;
-    const uint j = (uint)(j_abs + grid_width) % grid_width;
+    const uint i = mod((uint)(i_abs + grid_height), grid_height);
+    const uint j = mod((uint)(j_abs + grid_width), grid_width);
     const uint indiv_id = i * grid_width + j;
 
     // Preload the data
@@ -255,8 +248,8 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
         }
     }
 
-    for (uint8_t i = 0; i < 9; i++) {
-        probs[i] /= sumLocalFit;
+    for (uint8_t k = 0; k < 9; k++) {
+        probs[k] /= sumLocalFit;
     }
 
     Threefry::Device rng(gpu_counters, indiv_id, Threefry::Phase::REPROD, grid_width * grid_height);
@@ -265,7 +258,7 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
     delete[] probs;
 
     int i_offset = (found_org / 3) - 1;
-    int j_offset = (found_org % 3) - 1;
+    int j_offset = mod(found_org, 3) - 1;
 
     nextReproducers[indiv_id] = ((i + i_offset + grid_height) % grid_height) * grid_width +
                                 ((j + j_offset + grid_width) % grid_width);
@@ -279,10 +272,27 @@ void selection_gpu(ExpManager *exp_m) {
     dim3 block(TILE_WIDTH, TILE_WIDTH, 1);
 
     selection_gpu_kernel <<< grid, block >>>
-        (cudaMem.input, cudaMem.output, exp_m->grid_height_, exp_m->grid_width_, gpu_counters);
+        (cudaMem.fitness, cudaMem.nextReproducer, exp_m->grid_height_, exp_m->grid_width_, gpu_counters);
 
-    cudaCheck(cudaGetLastError());
+    checkCuda(cudaGetLastError());
     cudaDeviceSynchronize();
+}
+
+__global__ void search_promoters_gpu_kernel() {
+}
+
+void search_promoters_gpu(ExpManager *exp_m) {
+    uint grid = (exp_m->genome_size - PROM_SIZE + 1) / (STD_BLOCK_SIZE - PROM_SIZE + 1);
+    uint block = STD_BLOCK_SIZE;
+    search_promoters_gpu_kernel <<< grid, block >>>();
+}
+
+__global__ void search_terminators_gpu_kernel() {
+
+}
+
+void search_terminators_gpu(ExpManager *exp_m) {
+
 }
 
 /**
@@ -292,12 +302,8 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
 
     // Running the simulation process for each organism
     {
-        if(first_gen) {
-            counters_in(exp_m);
-        }
-
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
-        selection_in(exp_m, first_gen);
+        selection_in(exp_m);
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         selection_gpu(exp_m);
         high_resolution_clock::time_point t3 = high_resolution_clock::now();
@@ -317,7 +323,8 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (exp_m->dna_mutator_array_[indiv_id]->hasMutate()) {
-                exp_m->opt_prom_compute_RNA(indiv_id);
+                exp_m->start_stop_RNA(indiv_id);
+                exp_m->compute_RNA(indiv_id);
             }
         }
         t2 = high_resolution_clock::now();
@@ -373,7 +380,7 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         auto duration_compute_fitness = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
 
-        std::cout << "LOG," << duration_selection  << " (" << duration_selection_calc << "),"
+        std::cout << "LOG," << duration_selection  << "(" << duration_selection_calc << "),"
                   << duration_mutation << "," << duration_start_stop_RNA
                   << "," << duration_start_protein << "," << duration_compute_protein << ","
                   << duration_translate_protein
@@ -441,23 +448,3 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
     exp_m->stats_best->write_best();
     exp_m->stats_mean->write_average();
 }
-
-
-/**
- * Reallocate some data structures if needed
- * @param nb_indiv
- */
-void allocate_next_gen(int nb_indiv) {
-
-}
-
-/**
-PRNG usage:
- * For selection
-        Threefry::Device rng(gpu_counters,indiv_id,Threefry::Phase::REPROD,nb_indiv);
-        int found_org = rng.roulette_random(probs, NEIGHBORHOOD_SIZE);
- * For mutation:
-      Threefry::Device rng(gpu_counters,indiv_id,Threefry::Phase::MUTATION,nb_indivs);
-      rng.binomial_random(prev_gen_size, mutation_r);
-      rng.random( number );
- **/

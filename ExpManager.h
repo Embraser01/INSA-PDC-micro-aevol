@@ -124,6 +124,7 @@ class ExpManager {
 
         int grid_height_;
         int grid_width_;
+        int genome_size;
 
         double mutation_rate_;
 

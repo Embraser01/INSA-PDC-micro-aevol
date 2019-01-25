@@ -49,7 +49,7 @@ if (USE_CUDA)
 
     # CUDA Files
     set(CMAKE_CUDA_FLAGS "-std=c++11 -arch=compute_50 -lineinfo")
-    add_library(cuda_part STATIC Algorithms.cu)
+    add_library(cuda_part STATIC Algorithms.cu Algorithms.cuh)
     set_target_properties(cuda_part PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
     # Executable

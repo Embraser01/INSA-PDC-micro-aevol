@@ -65,6 +65,7 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
     // Initializing the data structure
     grid_height_ = grid_height;
     grid_width_ = grid_width;
+    genome_size = init_length_dna;
 
     backup_step_ = backup_step;
 
@@ -408,7 +409,8 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
             if (dna_mutator_array_[indiv_id]->hasMutate()) {
-                opt_prom_compute_RNA(indiv_id);
+                start_stop_RNA(indiv_id);
+                compute_RNA(indiv_id);
             }
         }
         t2 = high_resolution_clock::now();
@@ -1350,6 +1352,7 @@ void ExpManager::run_evolution_on_gpu(int nb_gen) {
     }
 
     printf("Running evolution from %d to %d\n", AeTime::time(), AeTime::time() + nb_gen);
+    init_cuda_mem(this);
     bool firstGen = true;
     for (int gen = 0; gen < nb_gen + 1; gen++) {
         AeTime::plusplus();
@@ -1370,6 +1373,7 @@ void ExpManager::run_evolution_on_gpu(int nb_gen) {
             save(AeTime::time());
         }
     }
+    clean_cuda_mem();
 }
 
 #endif
