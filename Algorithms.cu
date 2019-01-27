@@ -352,7 +352,7 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         }
         t3 = high_resolution_clock::now();
         auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-        auto duration_compute_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        auto duration_compute_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {

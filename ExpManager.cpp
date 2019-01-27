@@ -420,7 +420,7 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
         }
         high_resolution_clock::time_point t3 = high_resolution_clock::now();
         auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-        auto duration_compute_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        auto duration_compute_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
