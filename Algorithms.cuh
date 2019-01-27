@@ -12,8 +12,8 @@ typedef struct CudaMem {
     uint16_t *promoters;
     uint8_t *promoter_errors;
     uint16_t *terminators;
-    uint16_t *pos_prom_counter;
-    uint16_t *pos_term_counter;
+    uint *pos_prom_counter;
+    uint *pos_term_counter;
 } CudaMem;
 
 CudaMem cudaMem;
@@ -23,8 +23,8 @@ typedef struct HostMem {
     uint16_t *promoters;
     uint8_t *promoter_errors;
     uint16_t *terminators;
-    uint16_t *pos_prom_counter;
-    uint16_t *pos_term_counter;
+    uint *pos_prom_counter;
+    uint *pos_term_counter;
 } HostMem;
 
 HostMem hostMem;

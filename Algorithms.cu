@@ -23,8 +23,9 @@ using namespace std::chrono;
 #define DEBUG 1
 
 #define TILE_WIDTH 16
-#define STD_BLOCK_SIZE 256
-constexpr int DNA_INNER_BLOCK = STD_BLOCK_SIZE - PROM_SIZE + 1;
+#define STD_BLOCK_SIZE 1024
+constexpr int DNA_PROM_INNER_BLOCK = STD_BLOCK_SIZE - PROM_SIZE + 1;
+constexpr int DNA_TERM_INNER_BLOCK = STD_BLOCK_SIZE - 10;
 
 // Convenience function for checking CUDA runtime API results
 // can be wrapped around any runtime API call. No-op in release builds.
@@ -39,8 +40,6 @@ inline cudaError_t checkCuda(cudaError_t result) {
     return result;
 }
 
-
-constexpr int32_t PROMOTER_ARRAY_SIZE = 10000;
 
 void init_cuda_mem(ExpManager *exp_m) {
     // Random numbers generator
@@ -64,8 +63,13 @@ void init_cuda_mem(ExpManager *exp_m) {
     checkCuda(cudaMalloc((void **) &cudaMem.promoters, exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t)));
     checkCuda(cudaMalloc((void **) &cudaMem.promoter_errors, exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint8_t)));
     checkCuda(cudaMalloc((void **) &cudaMem.terminators, exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t)));
-    checkCuda(cudaMalloc((void **) &cudaMem.pos_prom_counter, exp_m->genome_size * sizeof(uint16_t)));
-    checkCuda(cudaMalloc((void **) &cudaMem.pos_term_counter, exp_m->genome_size * sizeof(uint16_t)));
+    checkCuda(cudaMalloc((void **) &cudaMem.pos_prom_counter, exp_m->nb_indivs_ * sizeof(uint)));
+    checkCuda(cudaMalloc((void **) &cudaMem.pos_term_counter, exp_m->nb_indivs_ * sizeof(uint)));
+    hostMem.promoters = new uint16_t[exp_m->nb_indivs_ * exp_m->genome_size];
+    hostMem.promoter_errors = new uint8_t[exp_m->nb_indivs_ * exp_m->genome_size];
+    hostMem.terminators = new uint16_t[exp_m->nb_indivs_ * exp_m->genome_size];
+    hostMem.pos_prom_counter = new uint[exp_m->nb_indivs_];
+    hostMem.pos_term_counter = new uint[exp_m->nb_indivs_];
 }
 
 
@@ -84,8 +88,8 @@ void selection_out(ExpManager *exp_m) {
 
 void prom_term_in(ExpManager *exp_m, uint indiv_id) {
     if(indiv_id == 0) {
-        cudaMemset(cudaMem.pos_prom_counter, 0, exp_m->genome_size * sizeof(uint16_t));
-        cudaMemset(cudaMem.pos_term_counter, 0, exp_m->genome_size * sizeof(uint16_t));
+        cudaMemset(cudaMem.pos_prom_counter, 0, exp_m->nb_indivs_ * sizeof(uint));
+        cudaMemset(cudaMem.pos_term_counter, 0, exp_m->nb_indivs_ * sizeof(uint));
     }
 
     checkCuda(cudaMemcpy(&cudaMem.DNA[indiv_id * exp_m->genome_size],
@@ -95,9 +99,9 @@ void prom_term_in(ExpManager *exp_m, uint indiv_id) {
 
 void prom_term_out(ExpManager *exp_m) {
     checkCuda(cudaMemcpy(hostMem.pos_prom_counter, cudaMem.pos_prom_counter,
-                         exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+                         exp_m->nb_indivs_ * sizeof(unsigned int), cudaMemcpyDeviceToHost));
     checkCuda(cudaMemcpy(hostMem.pos_term_counter, cudaMem.pos_term_counter,
-                         exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
+                         exp_m->nb_indivs_ * sizeof(unsigned int), cudaMemcpyDeviceToHost));
 
     for(uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
@@ -111,7 +115,7 @@ void prom_term_out(ExpManager *exp_m) {
                              &cudaMem.terminators[indiv_id * exp_m->genome_size],
                              hostMem.pos_term_counter[indiv_id] * sizeof(uint16_t), cudaMemcpyDeviceToHost));
     }
-    // Alternative:
+    // Alternative (less efficient)
 //    checkCuda(cudaMemcpy(hostMem.promoters, cudaMem.promoters,
 //                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
 //    checkCuda(cudaMemcpy(hostMem.promoter_errors, cudaMem.promoter_errors,
@@ -157,12 +161,15 @@ void clean_cuda_mem() {
 
     // Host
     delete[] hostMem.fitnessArray;
+    delete[] hostMem.promoters;
+    delete[] hostMem.promoter_errors;
+    delete[] hostMem.terminators;
+    delete[] hostMem.pos_prom_counter;
+    delete[] hostMem.pos_term_counter;
 }
 
 
-__device__ int32_t
-
-Threefry::Device::roulette_random(double *probs, int32_t nb_elts) {
+__device__ int32_t Threefry::Device::roulette_random(double *probs, int32_t nb_elts) {
     double pick_one = 0.0;
 
     while (pick_one == 0.0) {
@@ -179,34 +186,6 @@ Threefry::Device::roulette_random(double *probs, int32_t nb_elts) {
         pick_one -= probs[++found_org];
     }
     return found_org;
-}
-
-
-__constant__ double cof[6] = {76.18009172947146,
-                              -86.50532032941677,
-                              24.01409824083091,
-                              -1.231739572450155,
-                              0.1208650973866179e-2,
-                              -0.5395239384953e-5};
-
-
-// Returns the value ln[gamma(X)] for X.
-// The gamma function is defined by the integral  gamma(z) = int(0, +inf, t^(z-1).e^(-t)dt).
-// When the argument z is an integer, the gamma function is just the familiar factorial
-// function, but offset by one, n! = gamma(n + 1).
-__device__ static double gammln(double X) {
-    double x, y, tmp, ser;
-
-    y = x = X;
-    tmp = x + 5.5;
-    tmp -= (x + 0.5) * log(tmp);
-    ser = 1.000000000190015;
-
-    for (int8_t j = 0; j <= 5; j++) {
-        ser += cof[j] / ++y;
-    }
-
-    return -tmp + log(2.5066282746310005 * ser / x);
 }
 
 __device__ static int mod(int a, int b) {
@@ -269,8 +248,6 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
 }
 
 void selection_gpu(ExpManager *exp_m) {
-    int n = exp_m->nb_indivs_;
-
     dim3 grid(ceil(exp_m->grid_width_  / (float)(TILE_WIDTH - 2)),
               ceil(exp_m->grid_height_ / (float)(TILE_WIDTH - 2)), 1);
     dim3 block(TILE_WIDTH, TILE_WIDTH, 1);
@@ -278,21 +255,20 @@ void selection_gpu(ExpManager *exp_m) {
     selection_gpu_kernel <<< grid, block >>>
         (cudaMem.fitness, cudaMem.nextReproducer, exp_m->grid_height_, exp_m->grid_width_, gpu_counters);
 
-    checkCuda(cudaGetLastError());
-    cudaDeviceSynchronize();
+    checkCuda(cudaDeviceSynchronize());
 }
 
 __global__ void search_promoters_gpu_kernel(
-        char *DNA, uint16_t *promoters, uint8_t *promoter_errors, uint16_t *pos_prom_counter,
-        uint16_t genome_size, int indiv_id) {
+        char *DNA, uint16_t *promoters, uint8_t *promoter_errors, uint *pos_prom_counter,
+        int genome_size, int indiv_id) {
     const uint8_t i_t = threadIdx.x;
-    const uint16_t i = blockIdx.x * DNA_INNER_BLOCK + i_t;
+    const uint16_t i = blockIdx.x * DNA_PROM_INNER_BLOCK + i_t;
 
     __shared__ char preload[STD_BLOCK_SIZE];
     preload[i_t] = DNA[(i < genome_size) ? (indiv_id * genome_size + i) : ((indiv_id - 1) * genome_size + i)];
     __syncthreads();
 
-    if(i_t >= DNA_INNER_BLOCK) return;
+    if(i < genome_size && i_t >= DNA_PROM_INNER_BLOCK) return;
 
     uint8_t error = 0;
     for(uint k = 0; k < PROM_SIZE; k++) {
@@ -301,23 +277,46 @@ __global__ void search_promoters_gpu_kernel(
 
     if(error > 4) return;
 
-    // printf("hey! Indiv %d, pos %d\n", indiv_id, i);
+    uint pos_to_write = atomicAdd(&pos_prom_counter[indiv_id], 1);
+    promoters[indiv_id * genome_size + pos_to_write] = i;
+    promoter_errors[indiv_id * genome_size + pos_to_write] = error;
 }
 
 void search_promoters_gpu(ExpManager *exp_m, int indiv_id) {
-    int grid = exp_m->genome_size / DNA_INNER_BLOCK;
+    int grid = ceil(exp_m->genome_size / DNA_PROM_INNER_BLOCK);
     int block = STD_BLOCK_SIZE;
     search_promoters_gpu_kernel <<< grid, block >>>
         (cudaMem.DNA, cudaMem.promoters, cudaMem.promoter_errors, cudaMem.pos_prom_counter,
                 exp_m->genome_size, indiv_id);
 }
 
-__global__ void search_terminators_gpu_kernel() {
+__global__ void search_terminators_gpu_kernel(char *DNA, uint16_t *terminators, uint *pos_term_counter,
+                                              int genome_size, int indiv_id) {
+    const uint8_t i_t = threadIdx.x;
+    const uint16_t i = blockIdx.x * DNA_TERM_INNER_BLOCK + i_t;
 
+    __shared__ char preload[STD_BLOCK_SIZE];
+    preload[i_t] = DNA[(i < genome_size) ? (indiv_id * genome_size + i) : ((indiv_id - 1) * genome_size + i)];
+    __syncthreads();
+
+    if(i < genome_size && i_t >= DNA_TERM_INNER_BLOCK) return;
+
+    uint8_t error = 0;
+    for(uint k = 0; k < 4; k++) {
+        error += (preload[i_t + k] == preload[i_t - k + 10]) ? 0 : 1;
+    }
+
+    if(error > 0) return;
+
+    uint pos_to_write = atomicAdd(&pos_term_counter[indiv_id], 1);
+    terminators[indiv_id * genome_size + pos_to_write] = i;
 }
 
-void search_terminators_gpu(ExpManager *exp_m) {
-
+void search_terminators_gpu(ExpManager *exp_m, int indiv_id) {
+    int grid = ceil(exp_m->genome_size / DNA_TERM_INNER_BLOCK);
+    int block = STD_BLOCK_SIZE;
+    search_terminators_gpu_kernel <<< grid, block >>>
+        (cudaMem.DNA, cudaMem.terminators, cudaMem.pos_term_counter, exp_m->genome_size, indiv_id);
 }
 
 /**
@@ -337,7 +336,6 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         auto duration_selection = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t1).count();
         auto duration_selection_calc = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
 
-
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             exp_m->do_mutation(indiv_id);
@@ -350,14 +348,18 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
             if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
             prom_term_in(exp_m, indiv_id);
             search_promoters_gpu(exp_m, indiv_id);
+            search_terminators_gpu(exp_m, indiv_id);
         }
-        //prom_term_out(exp_m);
-//        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
-//            if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
-//            exp_m->compute_RNA(indiv_id);
-//        }
+        cudaDeviceSynchronize();
+        prom_term_out(exp_m);
         t2 = high_resolution_clock::now();
+        for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
+            if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
+            exp_m->compute_RNA(indiv_id);
+        }
+        t3 = high_resolution_clock::now();
         auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        auto duration_compute_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
@@ -410,11 +412,12 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
 
 
         std::cout << "LOG," << duration_selection  << "(" << duration_selection_calc << "),"
-                  << duration_mutation << "," << duration_start_stop_RNA
+                  << duration_mutation << "," << duration_start_stop_RNA << "," << duration_compute_RNA
                   << "," << duration_start_protein << "," << duration_compute_protein << ","
                   << duration_translate_protein
                   << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
                   << duration_compute_fitness << std::endl;
+        cout << "SEARCH," << duration_start_stop_RNA << endl;
 
     }
     for (int indiv_id = 1; indiv_id < exp_m->nb_indivs_; indiv_id++) {

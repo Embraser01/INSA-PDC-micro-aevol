@@ -410,11 +410,17 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
         for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
             if (dna_mutator_array_[indiv_id]->hasMutate()) {
                 start_stop_RNA(indiv_id);
-                compute_RNA(indiv_id);
             }
         }
         t2 = high_resolution_clock::now();
+        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+            if (dna_mutator_array_[indiv_id]->hasMutate()) {
+                compute_RNA(indiv_id);
+            }
+        }
+        high_resolution_clock::time_point t3 = high_resolution_clock::now();
         auto duration_start_stop_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        auto duration_compute_RNA = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
@@ -469,10 +475,11 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
 
 
         std::cout << "LOG," << duration_selection << "," << duration_mutation << "," << duration_start_stop_RNA
-                  << "," << duration_start_protein << "," << duration_compute_protein << ","
+                  << "," << duration_compute_RNA << "," << duration_start_protein << "," << duration_compute_protein << ","
                   << duration_translate_protein
                   << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
                   << duration_compute_fitness << std::endl;
+        cout << "SEARCH," << duration_start_stop_RNA << endl;
     }
     for (int indiv_id = 1; indiv_id < nb_indivs_; indiv_id++) {
         prev_internal_organisms_[indiv_id] = internal_organisms_[indiv_id];
