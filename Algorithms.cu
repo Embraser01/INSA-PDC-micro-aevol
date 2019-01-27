@@ -115,13 +115,6 @@ void prom_term_out(ExpManager *exp_m) {
                              &cudaMem.terminators[indiv_id * exp_m->genome_size],
                              hostMem.pos_term_counter[indiv_id] * sizeof(uint16_t), cudaMemcpyDeviceToHost));
     }
-    // Alternative (less efficient)
-//    checkCuda(cudaMemcpy(hostMem.promoters, cudaMem.promoters,
-//                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
-//    checkCuda(cudaMemcpy(hostMem.promoter_errors, cudaMem.promoter_errors,
-//                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint8_t), cudaMemcpyDeviceToHost));
-//    checkCuda(cudaMemcpy(hostMem.terminators, cudaMem.terminators,
-//                         exp_m->nb_indivs_ * exp_m->genome_size * sizeof(uint16_t), cudaMemcpyDeviceToHost));
 
     for(uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
         if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
@@ -190,15 +183,12 @@ __device__ int32_t Threefry::Device::roulette_random(double *probs, int32_t nb_e
 
 __device__ static int mod(int a, int b) {
     assert(b > 0);
-
     while (a < 0) a += b;
     while (a >= b) a -= b;
-
     return a;
 }
 __device__ static uint mod(uint a, uint b) {
     while (a >= b) a -= b;
-
     return a;
 }
 
@@ -258,6 +248,7 @@ void selection_gpu(ExpManager *exp_m) {
     checkCuda(cudaDeviceSynchronize());
 }
 
+
 __global__ void search_promoters_gpu_kernel(
         char *DNA, uint16_t *promoters, uint8_t *promoter_errors, uint *pos_prom_counter,
         int genome_size, int indiv_id) {
@@ -290,6 +281,7 @@ void search_promoters_gpu(ExpManager *exp_m, int indiv_id) {
                 exp_m->genome_size, indiv_id);
 }
 
+
 __global__ void search_terminators_gpu_kernel(char *DNA, uint16_t *terminators, uint *pos_term_counter,
                                               int genome_size, int indiv_id) {
     const uint8_t i_t = threadIdx.x;
@@ -318,6 +310,7 @@ void search_terminators_gpu(ExpManager *exp_m, int indiv_id) {
     search_terminators_gpu_kernel <<< grid, block >>>
         (cudaMem.DNA, cudaMem.terminators, cudaMem.pos_term_counter, exp_m->genome_size, indiv_id);
 }
+
 
 /**
  * Run a step on the GPU
@@ -417,7 +410,7 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
                   << duration_translate_protein
                   << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
                   << duration_compute_fitness << std::endl;
-        cout << "SEARCH," << duration_start_stop_RNA << endl;
+//        cout << "SEARCH," << duration_start_stop_RNA << endl;
 
     }
     for (int indiv_id = 1; indiv_id < exp_m->nb_indivs_; indiv_id++) {

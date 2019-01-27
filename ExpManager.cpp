@@ -479,7 +479,7 @@ void ExpManager::run_a_step(double w_max, double selection_pressure, bool first_
                   << duration_translate_protein
                   << "," << duration_compute_phenotype << "," << duration_compute_phenotype << ","
                   << duration_compute_fitness << std::endl;
-        cout << "SEARCH," << duration_start_stop_RNA << endl;
+//        cout << "SEARCH," << duration_start_stop_RNA << endl;
     }
     for (int indiv_id = 1; indiv_id < nb_indivs_; indiv_id++) {
         prev_internal_organisms_[indiv_id] = internal_organisms_[indiv_id];
