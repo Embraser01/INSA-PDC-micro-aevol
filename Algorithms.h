@@ -3,8 +3,12 @@ class ExpManager;
 /**
  * Data transfer functions
  */
-void transfer_in(ExpManager* exp_m,bool first_gen);
-void transfer_out(ExpManager* exp_m);
+void init_cuda_mem(ExpManager *exp_m);
+void clean_cuda_mem();
+void selection_in(ExpManager *exp_m);
+void selection_out(ExpManager *exp_m);
+void prom_term_in(ExpManager *exp_m, uint indiv_id);
+void prom_term_out(ExpManager *exp_m);
 
 void clean(ExpManager* exp_m);
 void allocate_next_gen(int nb_indiv);
