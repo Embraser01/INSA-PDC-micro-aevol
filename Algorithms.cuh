@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../../../../../../usr/lib/gcc/x86_64-linux-gnu/6/include/stdint-gcc.h"
 
 // PRNG
 unsigned long long *gpu_counters;
