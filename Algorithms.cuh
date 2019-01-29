@@ -1,5 +1,5 @@
 #pragma once
-
+#include <cstdint>
 
 // PRNG
 unsigned long long *gpu_counters;
