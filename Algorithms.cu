@@ -212,7 +212,7 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
 
     // Calculate value
     double sumLocalFit = 0.0;
-    double * probs = new double[9];
+    double probs[9];
     for (int8_t o_i = -1; o_i <= 1; o_i++) {
         for (int8_t o_j = -1; o_j <= 1; o_j++) {
             probs[3 * (o_i + 1) + o_j + 1] = preload[i_t + o_i][j_t + o_j];
@@ -226,8 +226,6 @@ __global__ void selection_gpu_kernel(const double* fitnessArr, int* nextReproduc
 
     Threefry::Device rng(gpu_counters, indiv_id, Threefry::Phase::REPROD, grid_width * grid_height);
     int found_org = rng.roulette_random(probs, 9);
-
-    delete[] probs;
 
     int i_offset = (found_org / 3) - 1;
     int j_offset = mod(found_org, 3) - 1;
@@ -338,15 +336,16 @@ void run_a_step_on_GPU(ExpManager *exp_m, double w_max, double selection_pressur
         t1 = high_resolution_clock::now();
         for (uint indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
-            prom_term_in(exp_m, indiv_id);
-            search_promoters_gpu(exp_m, indiv_id);
-            search_terminators_gpu(exp_m, indiv_id);
+            //prom_term_in(exp_m, indiv_id);
+            //search_promoters_gpu(exp_m, indiv_id);
+            //search_terminators_gpu(exp_m, indiv_id);
         }
         cudaDeviceSynchronize();
-        prom_term_out(exp_m);
+        //prom_term_out(exp_m);
         t2 = high_resolution_clock::now();
         for (int indiv_id = 0; indiv_id < exp_m->nb_indivs_; indiv_id++) {
             if (!exp_m->dna_mutator_array_[indiv_id]->hasMutate()) continue;
+            exp_m->opt_prom_compute_RNA(indiv_id);
             exp_m->compute_RNA(indiv_id);
         }
         t3 = high_resolution_clock::now();
