@@ -6,6 +6,10 @@ DO NOT USE IT TO SIMULATE BIOLOGICAL RESULTS ! See [http://www.aevol.fr](http://
 
 It must be used only to test HPC optimization of the code (parallel, vector, porting to new architecture...).
 
+Github link: https://github.com/Embraser01/INSA-PDC-micro-aevol
+
+Report path (fr): [rapport.pdf](./report/rapport.pdf)
+
 ## Getting Started
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
@@ -31,7 +35,7 @@ cmake .
 make
 ```
 
-It will produced the executable pdc_mini_aevol.
+It will produce the executables `pdc_mini_aevol` **and** `pdc_mini_aevol_gpu`.
 
 ## Running a simulation
 
@@ -50,13 +54,12 @@ cd simulation_example_1
 ../pdc_mini_aevol -r 1000
 ```
 
-## Model and Implementation
-
-More details about the model and its implementation are given at : 
-
 ## Authors
 
 * **Jonathan Rouzaud-Cornabas** - *Initial work*
+* **Xavier Dussert-Vidalet**
+* **Marc-Antoine Fernandes**
+* **Louis Sugy**
 
 For the authors of Aevol software, see [http://www.aevol.fr](http://www.aevol.fr)
 
